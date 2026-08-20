@@ -1,0 +1,79 @@
+# ==========================================
+# 1. Virtual Environments
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# ==========================================
+# 2. Python Bytecode & Cache
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# ==========================================
+# 3. Environment Secrets & Configs
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+credentials.json
+token.json
+
+# ==========================================
+# 4. Large Data, Weights & Dataset Files
+# (GitHub rejects files > 100MB)
+# ==========================================
+# Feature arrays & Model checkpoints
+*.npy
+*.npz
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+*.h5
+*.pkl
+
+# Heavy Dataset Folders
+Keyframes*/
+keyframes*/
+clip-features*/
+media-info*/
+downloaded_*/
+THUNGHIEM-bo-de-thi/
+
+# Compressed archives
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+
+# ==========================================
+# 5. Output, Submissions & Logs
+# ==========================================
+submission/
+submissions/
+*.log
+logs/
+
+# ==========================================
+# 6. IDE & OS files
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

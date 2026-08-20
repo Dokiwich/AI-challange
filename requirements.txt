@@ -1,0 +1,13 @@
+numpy
+torch
+torchvision
+ftfy
+regex
+tqdm
+git+https://github.com/openai/CLIP.git
+pillow
+pandas
+streamlit
+deep-translator
+gdown
+python-dotenv
