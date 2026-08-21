@@ -187,7 +187,7 @@ if query_mode == "🔍 Textual KIS (Tìm kiếm văn bản)":
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
                         img = Image.open(item["image_path"])
-                        st.image(img, use_container_width=True)
+                        st.image(img, use_column_width=True)
                     except Exception:
                         st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
                 else:
@@ -196,6 +196,10 @@ if query_mode == "🔍 Textual KIS (Tìm kiếm văn bản)":
                 score_pct = item["score"] * 100
                 st.progress(max(0.0, min(1.0, float(item["score"]))))
                 st.caption(f"Cosine Score: **{score_pct:.2f}%**")
+                
+                if st.button("🎯 Chọn làm đáp án", key=f"kis_select_{i}", use_container_width=True):
+                    saved_path = exporter.export_kis([item], sub_filename, max_rows=1)
+                    st.success(f"✅ Đã lưu chính xác **{item['video']}, {item['frame']}** vào file `{saved_path}`")
 
 
 # =========================================================================
@@ -284,13 +288,18 @@ elif query_mode == "❓ Visual Q&A (Hỏi - Đáp)":
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
                         img = Image.open(item["image_path"])
-                        st.image(img, use_container_width=True)
+                        st.image(img, use_column_width=True)
                     except Exception:
                         st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
                 else:
                     st.markdown(f'<div class="no-img-box">Ảnh chưa giải nén<br><b>{item["video"]}</b><br>Frame #{item["frame"]}</div>', unsafe_allow_html=True)
 
                 st.caption(f"Score: **{item['score']*100:.2f}%**")
+                
+                if st.button("🎯 Chọn làm đáp án", key=f"qa_select_{i}", use_container_width=True):
+                    qa_sub = [{"video": item["video"], "frame": item["frame"], "answer": qa_answer.strip()}]
+                    saved_path = exporter.export_qa(qa_sub, qa_sub_filename, max_rows=1)
+                    st.success(f"✅ Đã lưu đáp án **{item['video']}, {item['frame']}** vào `{saved_path}`")
 
 
 # =========================================================================
