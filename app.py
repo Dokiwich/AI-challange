@@ -90,6 +90,7 @@ filter_extracted = st.sidebar.checkbox(f"🖼️ Chỉ tìm video đã có ảnh
 
 top_k = st.sidebar.slider("Số lượng kết quả (Top K):", min_value=10, max_value=100, value=50, step=10)
 cols_count = st.sidebar.slider("Số cột hiển thị ảnh:", min_value=2, max_value=6, value=4, step=1)
+audio_weight = st.sidebar.slider("Trọng số Âm thanh (ASR):", min_value=0.0, max_value=1.0, value=0.0, step=0.1, help="0.0: Chỉ tìm bằng hình ảnh. 1.0: Chỉ tìm bằng lời nói.")
 
 st.sidebar.markdown("---")
 if engine.device == "cuda":
@@ -150,7 +151,8 @@ if query_mode == "🔍 Textual KIS (Tìm kiếm văn bản)":
                 query_text.strip(),
                 top_k=top_k,
                 video_filter=v_filter,
-                auto_translate=auto_translate
+                auto_translate=auto_translate,
+                audio_weight=audio_weight
             )
             st.session_state["kis_results"] = results
             st.session_state["kis_trans_q"] = translated_q
@@ -187,7 +189,7 @@ if query_mode == "🔍 Textual KIS (Tìm kiếm văn bản)":
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
                         img = Image.open(item["image_path"])
-                        st.image(img, use_column_width=True)
+                        st.image(img, use_container_width=True)
                     except Exception:
                         st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
                 else:
@@ -242,7 +244,8 @@ elif query_mode == "❓ Visual Q&A (Hỏi - Đáp)":
                 qa_query_text.strip(),
                 top_k=top_k,
                 video_filter=v_filter,
-                auto_translate=auto_translate
+                auto_translate=auto_translate,
+                audio_weight=audio_weight
             )
             st.session_state["qa_results"] = results
             st.session_state["qa_trans_q"] = trans_q
@@ -261,7 +264,7 @@ elif query_mode == "❓ Visual Q&A (Hỏi - Đáp)":
         st.markdown("#### ✍️ Nhập câu trả lời (Answer):")
         ans_col1, ans_col2, ans_col3 = st.columns([2, 1, 1])
         with ans_col1:
-            qa_answer = st.text_input("Nội dung câu trả lời (Tối đa 100 ký tự):", value="yes", placeholder="Nhập câu trả lời...")
+            qa_answer = st.text_input("Nội dung câu trả lời (Tối đa 100 ký tự):", value="", placeholder="Đọc ảnh/lời thoại bên dưới rồi nhập câu trả lời...")
             st.caption(f"Độ dài: {len(qa_answer)}/100 ký tự")
         with ans_col2:
             qa_sub_filename = st.text_input("Tên file nộp bài Q&A:", value=st.session_state.get("qa_sub_name", default_sub_name))
@@ -288,13 +291,23 @@ elif query_mode == "❓ Visual Q&A (Hỏi - Đáp)":
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
                         img = Image.open(item["image_path"])
-                        st.image(img, use_column_width=True)
+                        st.image(img, use_container_width=True)
                     except Exception:
                         st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
                 else:
                     st.markdown(f'<div class="no-img-box">Ảnh chưa giải nén<br><b>{item["video"]}</b><br>Frame #{item["frame"]}</div>', unsafe_allow_html=True)
 
                 st.caption(f"Score: **{item['score']*100:.2f}%**")
+                
+                # Hiển thị lời thoại ASR gần keyframe này (giúp tìm đáp án Q&A)
+                asr_text = ""
+                if hasattr(engine, 'get_transcript_for_frame'):
+                    asr_text = engine.get_transcript_for_frame(item["index"])
+                elif hasattr(engine, 'keyframe_texts') and item["index"] < len(engine.keyframe_texts):
+                    asr_text = engine.keyframe_texts[item["index"]].strip()
+                if asr_text:
+                    with st.expander("🎤 Lời thoại gần frame này"):
+                        st.caption(asr_text[:500])
                 
                 if st.button("🎯 Chọn làm đáp án", key=f"qa_select_{i}", use_container_width=True):
                     qa_sub = [{"video": item["video"], "frame": item["frame"], "answer": qa_answer.strip()}]
@@ -437,13 +450,13 @@ elif query_mode == "⚡ Batch Processing (Xử lý hàng loạt)":
                     summary_list.append({"File đề": fname, "Loại": "TRAKE", "Số dòng": len(trake_res), "File CSV": csv_name})
 
                 elif "qa" in fname.lower():
-                    res, _ = engine.search(content, top_k=100, auto_translate=auto_translate)
+                    res, _ = engine.search(content, top_k=100, auto_translate=auto_translate, audio_weight=audio_weight)
                     qa_data = [{"video": r["video"], "frame": r["frame"], "answer": "yes"} for r in res]
                     out_path = exporter.export_qa(qa_data, csv_name)
                     summary_list.append({"File đề": fname, "Loại": "Q&A", "Số dòng": len(qa_data), "File CSV": csv_name})
 
                 else:
-                    res, _ = engine.search(content, top_k=100, auto_translate=auto_translate)
+                    res, _ = engine.search(content, top_k=100, auto_translate=auto_translate, audio_weight=audio_weight)
                     out_path = exporter.export_kis(res, csv_name)
                     summary_list.append({"File đề": fname, "Loại": "KIS", "Số dòng": len(res), "File CSV": csv_name})
 
