@@ -78,9 +78,9 @@ def main():
     model.eval()
 
     # 2. Đọc file vector ảnh (.npy)
-    npy_path = input("👉 Nhập đường dẫn file vector ảnh (.npy) [mặc định: image_features.npy]: ").strip()
+    npy_path = input("👉 Nhập đường dẫn file vector ảnh (.npy) [mặc định: ../data/features/clip_features.npy]: ").strip()
     if not npy_path:
-        npy_path = "image_features.npy"
+        npy_path = "../data/features/clip_features.npy"
 
     try:
         image_embeddings = load_image_embeddings(npy_path)

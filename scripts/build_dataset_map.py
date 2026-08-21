@@ -5,9 +5,9 @@ import numpy as np
 from tqdm import tqdm
 
 def build_dataset(
-    features_dir="clip-features-32-aic25-b1/clip-features-32",
-    output_npy="clip_features.npy",
-    output_map="map_keyframes.json"
+    features_dir="../data/features/clip-features-32-aic25-b1/clip-features-32",
+    output_npy="../data/features/clip_features.npy",
+    output_map="../data/mapping/map_keyframes.json"
 ):
     """
     Gộp toàn bộ các file vector .npy riêng lẻ của từng video thành 1 file duy nhất 'clip_features.npy'

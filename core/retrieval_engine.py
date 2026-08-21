@@ -1,6 +1,7 @@
 import os
 import glob
 import json
+import re
 import numpy as np
 import torch
 import clip
@@ -18,8 +19,8 @@ class RetrievalEngine:
 
     def __init__(
         self,
-        features_path: str = "clip_features.npy",
-        map_path: str = "map_keyframes.json",
+        features_path: str = "data/features/clip_features.npy",
+        map_path: str = "data/mapping/map_keyframes.json",
         model_name: str = "ViT-B/32",
         device: str = None
     ):
@@ -75,15 +76,17 @@ class RetrievalEngine:
     def _scan_keyframe_roots(self):
         roots = []
         current_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
-        for entry in os.listdir(current_dir):
-            full_path = os.path.join(current_dir, entry)
-            if os.path.isdir(full_path):
-                if "keyframe" in entry.lower():
-                    sub_kf = os.path.join(full_path, "keyframes")
-                    if os.path.isdir(sub_kf):
-                        roots.append(sub_kf)
-                    else:
-                        roots.append(full_path)
+        data_kf_dir = os.path.join(current_dir, "data", "keyframes")
+        if os.path.isdir(data_kf_dir):
+            for entry in os.listdir(data_kf_dir):
+                full_path = os.path.join(data_kf_dir, entry)
+                if os.path.isdir(full_path):
+                    if "keyframe" in entry.lower():
+                        sub_kf = os.path.join(full_path, "keyframes")
+                        if os.path.isdir(sub_kf):
+                            roots.append(sub_kf)
+                        else:
+                            roots.append(full_path)
         if not roots:
             roots.append(current_dir)
         return roots
@@ -230,7 +233,7 @@ class RetrievalEngine:
             sim = (feat @ self.image_features.T).squeeze(0)
             top_val, top_idx = sim.topk(min(150, self.image_features.shape[0]))
             for v, idx in zip(top_val.tolist(), top_idx.tolist()):
-                vname = self.keyframe_map[idx]["video"]
+                vname = self.keyframe_map[idx].get("video") or self.keyframe_map[idx].get("video_name")
                 if video_filter and vname not in video_filter:
                     continue
                 candidate_videos.add(vname)
@@ -258,7 +261,7 @@ class RetrievalEngine:
                 found = False
                 for pos in sorted_score_pos.tolist():
                     global_idx = v_indices[pos]
-                    f_id = int(self.keyframe_map[global_idx]["frame"])
+                    f_id = int(self.keyframe_map[global_idx].get("frame") or self.keyframe_map[global_idx].get("frame_idx") or 1)
                     if f_id > min_frame:
                         chosen_frames.append({
                             "frame": f_id,

@@ -11,8 +11,8 @@ import clip
 # ==========================================
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CLIP_MODEL_NAME = "ViT-B/32"  # Trùng khớp với mô hình trích xuất của BTC
-NPY_FEATURES_PATH = "clip_features.npy"
-KEYFRAME_MAP_PATH = "map_keyframes.json"
+NPY_FEATURES_PATH = "data/features/clip_features.npy"
+KEYFRAME_MAP_PATH = "data/mapping/map_keyframes.json"
 
 print(f"[INFO] Đang chạy trên thiết bị: {DEVICE}")
 

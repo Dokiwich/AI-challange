@@ -98,7 +98,7 @@ else:
     st.sidebar.markdown('**Thiết bị xử lý:** <span class="badge-cpu">CPU</span> (RTX 3050 có sẵn trên máy)', unsafe_allow_html=True)
 
 st.sidebar.markdown(f"**Tổng số Keyframes:** `{len(engine.keyframe_map):,}`")
-st.sidebar.markdown(f"**Video có sẵn ảnh:** `{len(extracted_videos)} video` (L21)")
+st.sidebar.markdown(f"**Video có sẵn ảnh:** `{len(extracted_videos)} video`")
 
 # Header
 st.markdown('<div class="main-header">AIC Video Retrieval & Submission Platform</div>', unsafe_allow_html=True)

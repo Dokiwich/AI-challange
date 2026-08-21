@@ -42,14 +42,14 @@ def process_query_file(
         if not event_queries:
             event_queries = lines
         
-        trake_res = engine.search_trake(event_queries, top_k_videos=top_k)
+        trake_res, _ = engine.search_trake(event_queries, top_k_videos=top_k)
         saved_path = exporter.export_trake(trake_res, csv_filename, max_rows=top_k)
         print(f"[TRAKE] Đã xuất: {saved_path} ({len(trake_res)} dòng)")
         return saved_path
 
     elif "qa" in fname.lower():
         # Dạng Q&A
-        res = engine.search(content, top_k=top_k)
+        res, _ = engine.search(content, top_k=top_k)
         qa_data = [{"video": r["video"], "frame": r["frame"], "answer": "yes"} for r in res]
         saved_path = exporter.export_qa(qa_data, csv_filename, max_rows=top_k)
         print(f"[QA] Đã xuất: {saved_path} ({len(qa_data)} dòng)")
@@ -57,7 +57,7 @@ def process_query_file(
 
     else:
         # Dạng KIS
-        res = engine.search(content, top_k=top_k)
+        res, _ = engine.search(content, top_k=top_k)
         saved_path = exporter.export_kis(res, csv_filename, max_rows=top_k)
         print(f"[KIS] Đã xuất: {saved_path} ({len(res)} dòng)")
         return saved_path
