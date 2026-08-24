@@ -1,4 +1,3 @@
-tên: "AIC User", email: "
+TeamAccount: aic2026-180
 
-aic@example.com
-"
+TeamPassword: jtt7ikKvj8lx

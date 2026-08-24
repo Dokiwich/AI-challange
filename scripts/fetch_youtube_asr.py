@@ -68,7 +68,7 @@ def download_audio(video_id, url):
     except subprocess.TimeoutExpired:
         print(" (Quá 60s) ", end="", flush=True)
         return False
-    except:
+    except Exception:
         return False
 
 def parse_vtt_to_json(vtt_path, json_path):
@@ -140,7 +140,7 @@ def main():
             # Clean up VTT
             try:
                 os.remove(vtt_path)
-            except:
+            except Exception:
                 pass
         else:
             print(f"-> KHÔNG CÓ Subtitles. Đang tải Audio...", end=" ", flush=True)
@@ -155,7 +155,7 @@ def main():
         for f in glob.glob(os.path.join(TEMP_DIR, "*")):
             try:
                 os.remove(f)
-            except:
+            except Exception:
                 pass
                 
     print("\n" + "="*40)

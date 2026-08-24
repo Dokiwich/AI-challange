@@ -11,3 +11,4 @@ streamlit
 deep-translator
 gdown
 python-dotenv
+rank_bm25

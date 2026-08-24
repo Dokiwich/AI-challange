@@ -1,500 +1,381 @@
 import os
 import glob
 import re
-import pandas as pd
+import time
 import streamlit as st
 from PIL import Image
 
 from core.retrieval_engine import RetrievalEngine
 from core.submission_exporter import SubmissionExporter
 
-st.set_page_config(
-    page_title="AIC Video Retrieval System",
-    page_icon="🎬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="AIC 2026 Video Retrieval", layout="wide", initial_sidebar_state="expanded")
 
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.2rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, #1E88E5 0%, #7E57C2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 0.2rem;
-    }
-    .sub-header {
-        font-size: 1rem;
-        color: #666;
-        margin-bottom: 1.2rem;
-    }
-    .no-img-box {
-        height: 180px;
-        background: #f8f9fa;
-        border-radius: 8px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #6c757d;
-        font-size: 0.85rem;
-        border: 1px dashed #ced4da;
-        text-align: center;
-        padding: 8px;
-    }
-    .badge-gpu {
-        background-color: #e8f5e9;
-        color: #2e7d32;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: 600;
-        font-size: 0.85rem;
-    }
-    .badge-cpu {
-        background-color: #fff3e0;
-        color: #e65100;
-        padding: 4px 8px;
-        border-radius: 6px;
-        font-weight: 600;
-        font-size: 0.85rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+_ENGINE_VERSION = 14
+if st.session_state.get("_engine_ver") != _ENGINE_VERSION:
+    for k in [k for k in st.session_state if k.startswith(("kis_", "qa_", "trake_"))]:
+        del st.session_state[k]
+    st.session_state["_engine_ver"] = _ENGINE_VERSION
 
-@st.cache_resource(show_spinner="Đang nạp Model CLIP và Database Vector...")
-def get_engine():
+@st.cache_resource(show_spinner="Loading CLIP model and 4-Track Vector Database...")
+def get_engine(version=_ENGINE_VERSION):
     return RetrievalEngine()
 
 engine = get_engine()
 exporter = SubmissionExporter()
 extracted_videos = engine.get_extracted_videos()
 
-# Sidebar
-st.sidebar.markdown("## ⚙️ Bảng Điều Khiển")
-query_mode = st.sidebar.radio(
-    "Chọn chức năng:",
+# =========================================================================
+# SIDEBAR CONTROLLER
+# =========================================================================
+st.sidebar.markdown("## 🏆 AIC 2026 Settings")
+query_mode = st.sidebar.radio("Tác vụ thi đấu (Task):", [
+    "Textual KIS",
+    "Visual QA",
+    "TRAKE",
+    "Batch Processing",
+])
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🏎️ Kiến trúc 4 Hướng (4-Track Selector)")
+
+track_choice = st.sidebar.selectbox(
+    "Chọn Engine Mode:",
     [
-        "🔍 Textual KIS (Tìm kiếm văn bản)",
-        "❓ Visual Q&A (Hỏi - Đáp)",
-        "⏱️ TRAKE (Chuỗi sự kiện video)",
-        "⚡ Batch Processing (Xử lý hàng loạt)",
-        "📥 Tải dữ liệu từ Google Drive (gdown)"
-    ]
+        "🧠 Track 4: Adaptive Meta-Policy (Khuyên dùng)",
+        "🌟 Track 3: Hybrid Fusion (Late Retrieval)",
+        "⚡ Track 1: Offline V2 (Zero-LLM Cục bộ)",
+        "🤖 Track 2: AI Semantic V2 (Thuần LLM)"
+    ],
+    index=0,
+    help="Track 4 tự động định tuyến thông minh tối ưu tốc độ và độ chính xác cho từng loại câu hỏi."
 )
 
-st.sidebar.markdown("---")
-st.sidebar.markdown("### 🛠️ Tùy chọn nâng cao")
-auto_translate = st.sidebar.checkbox("🌐 Tự động dịch Tiếng Việt -> Tiếng Anh (Khuyên dùng)", value=True, help="OpenAI CLIP học trên tiếng Anh nên dịch sang tiếng Anh sẽ nâng độ chính xác lên gấp nhiều lần.")
-filter_extracted = st.sidebar.checkbox(f"🖼️ Chỉ tìm video đã có ảnh trên máy ({len(extracted_videos)} video)", value=False, help="Chỉ tìm kiếm trong các video mà bạn đã tải/giải nén thư mục Keyframes về máy để luôn thấy ảnh.")
+track_mode_map = {
+    "🧠 Track 4: Adaptive Meta-Policy (Khuyên dùng)": "meta",
+    "🌟 Track 3: Hybrid Fusion (Late Retrieval)": "hybrid",
+    "⚡ Track 1: Offline V2 (Zero-LLM Cục bộ)": "offline",
+    "🤖 Track 2: AI Semantic V2 (Thuần LLM)": "ai"
+}
+engine_mode = track_mode_map[track_choice]
 
-top_k = st.sidebar.slider("Số lượng kết quả (Top K):", min_value=10, max_value=100, value=50, step=10)
-cols_count = st.sidebar.slider("Số cột hiển thị ảnh:", min_value=2, max_value=6, value=4, step=1)
-audio_weight = st.sidebar.slider("Trọng số Âm thanh (ASR):", min_value=0.0, max_value=1.0, value=0.0, step=0.1, help="0.0: Chỉ tìm bằng hình ảnh. 1.0: Chỉ tìm bằng lời nói.")
-
-st.sidebar.markdown("---")
-if engine.device == "cuda":
-    st.sidebar.markdown('**Thiết bị xử lý:** <span class="badge-gpu">GPU (CUDA)</span>', unsafe_allow_html=True)
+# Cấu hình LLM nếu dùng Track 2, 3 hoặc 4
+if engine_mode in ["meta", "hybrid", "ai"]:
+    st.sidebar.markdown("#### 🤖 Cấu hình AI Semantic Compiler")
+    ai_connected = engine.compiler.ai_parser.check_connection()
+    st.sidebar.caption(f"Trạng thái: {'🟢 Online (9Router)' if ai_connected else '🔴 Offline / Dự phòng cục bộ'}")
+    if ai_connected:
+        available_models = engine.compiler.ai_parser.get_available_models()
+        curr_model = engine.compiler.ai_parser.model_name
+        default_idx = available_models.index(curr_model) if curr_model in available_models else 0
+        selected_model = st.sidebar.selectbox("AI Model:", available_models, index=default_idx)
+        engine.compiler.ai_parser.model_name = selected_model
 else:
-    st.sidebar.markdown('**Thiết bị xử lý:** <span class="badge-cpu">CPU</span> (RTX 3050 có sẵn trên máy)', unsafe_allow_html=True)
+    st.sidebar.caption("⚡ Track 1 đang hoạt động: 100% Cục bộ không phụ thuộc LLM.")
 
-st.sidebar.markdown(f"**Tổng số Keyframes:** `{len(engine.keyframe_map):,}`")
-st.sidebar.markdown(f"**Video có sẵn ảnh:** `{len(extracted_videos)} video`")
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🎙️ Lời thoại ASR (Thủ công)")
+use_asr = st.sidebar.checkbox("Bật tìm kiếm Lời thoại (ASR)", value=False, help="Chỉ kích hoạt kênh tìm kiếm ASR khi bạn bật tùy chọn này.")
+if use_asr:
+    audio_weight = st.sidebar.slider("ASR weight:", min_value=0.05, max_value=1.0, value=0.3, step=0.05)
+    custom_asr_kws = st.sidebar.text_input("Từ khóa ASR tùy chọn:", value="")
+else:
+    audio_weight = 0.0
+    custom_asr_kws = ""
 
-# Header
-st.markdown('<div class="main-header">AIC Video Retrieval & Submission Platform</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Hệ thống tìm kiếm khung hình bán tự động (Interactive / Semi-Auto) & Xuất kết quả nộp bài chuẩn BTC</div>', unsafe_allow_html=True)
+st.sidebar.markdown("---")
+st.sidebar.markdown("### ⚙️ Cấu hình truy xuất")
+auto_translate = st.sidebar.checkbox("Tự động dịch sang tiếng Anh", value=True)
+filter_extracted = st.sidebar.checkbox(f"Chỉ tìm trong video đã trích xuất ({len(extracted_videos)})", value=False)
+top_k = st.sidebar.slider("Top K kết quả:", min_value=10, max_value=100, value=50, step=10)
+cols_count = st.sidebar.slider("Số cột hiển thị:", min_value=2, max_value=6, value=4, step=1)
+diversity_top_2 = st.sidebar.checkbox("Lọc đa dạng hóa Top-2 (Diversity)", value=False)
 
-test_files = sorted(glob.glob(os.path.join("THUNGHIEM-bo-de-thi", "*.txt"))) + sorted(glob.glob("*.txt"))
+st.sidebar.markdown("---")
+st.sidebar.text(f"Device: {engine.device}")
+st.sidebar.text(f"Keyframes: {len(engine.keyframe_map):,}")
+
+# =========================================================================
+# HEADER
+# =========================================================================
+st.markdown("# 🎬 AIC 2026 Video Retrieval System")
+st.caption("Industrial-Grade Multimodal Video Retrieval with 4-Track Adaptive Meta-Policy & Constraint Graph Judge")
+
+test_files = sorted(glob.glob(os.path.join("de-thi", "*.txt"))) + sorted(glob.glob(os.path.join("THUNGHIEM-bo-de-thi", "*.txt")))
 test_files = [f for f in test_files if "requirement" not in f.lower()]
-
 v_filter = list(extracted_videos) if filter_extracted else None
 
-
 # =========================================================================
-# 1. TEXTUAL KIS
+# KIS
 # =========================================================================
-if query_mode == "🔍 Textual KIS (Tìm kiếm văn bản)":
-    st.subheader("🎯 Textual Known Item Search (Textual KIS)")
-    st.info("Tìm kiếm chính xác khung hình theo mô tả văn bản. Format nộp bài: `<video_name>, <frame_idx>`")
+if query_mode == "Textual KIS":
+    st.subheader("Textual Known Item Search (KIS)")
 
-    col_select, col_custom = st.columns([1, 2])
-    with col_select:
-        selected_file = st.selectbox(
-            "Chọn file đề thi mẫu (nếu có):",
-            ["(Nhập thủ công)"] + [f for f in test_files if "kis" in f.lower() or "txt" in f.lower()]
-        )
+    selected_file = st.selectbox("Tải file đề thi:", ["(Manual input)"] + [f for f in test_files if "kis" in f.lower() or not any(t in f.lower() for t in ["qa", "trake"])])
 
     default_query = ""
     default_sub_name = "query-1-kis.csv"
-    if selected_file != "(Nhập thủ công)":
+    if selected_file != "(Manual input)":
         try:
             with open(selected_file, "r", encoding="utf-8") as f:
                 default_query = f.read().strip()
-            base_name = os.path.splitext(os.path.basename(selected_file))[0]
-            default_sub_name = f"{base_name}.csv"
+            default_sub_name = os.path.splitext(os.path.basename(selected_file))[0] + ".csv"
         except Exception as e:
-            st.error(f"Lỗi đọc file: {e}")
+            st.error(f"Error: {e}")
 
-    query_text = st.text_area(
-        "📝 Câu truy vấn mô tả khung hình cần tìm:",
-        value=default_query,
-        placeholder="Ví dụ: Đây là phần giới thiệu việc phóng tàu vũ trụ tư nhân...",
-        height=100
-    )
+    query_text = st.text_area("Nội dung truy vấn (Query):", value=default_query, height=100)
 
-    btn_search = st.button("🚀 Bắt đầu tìm kiếm KIS", type="primary", use_container_width=True)
-
-    if btn_search and query_text.strip():
-        with st.spinner("Đang xử lý và tính Cosine Similarity trên toàn bộ vector database..."):
-            results, translated_q = engine.search(
+    if st.button("🚀 Bắt đầu Tìm kiếm", type="primary", use_container_width=True) and query_text.strip():
+        t0 = time.time()
+        with st.spinner("Đang xử lý qua 4-Stage Precision Pipeline..."):
+            results, trans_q, intent = engine.search(
                 query_text.strip(),
                 top_k=top_k,
                 video_filter=v_filter,
                 auto_translate=auto_translate,
-                audio_weight=audio_weight
+                engine_mode=engine_mode,
+                use_ai_query=(engine_mode in ["meta", "hybrid", "ai"]),
+                use_asr=use_asr,
+                audio_weight=audio_weight,
+                asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
+                diversity_top_2=diversity_top_2
             )
+            lat = time.time() - t0
             st.session_state["kis_results"] = results
-            st.session_state["kis_trans_q"] = translated_q
+            st.session_state["kis_trans_q"] = trans_q
+            st.session_state["kis_intent"] = intent
             st.session_state["kis_sub_name"] = default_sub_name
+            st.session_state["kis_lat"] = lat
 
     if "kis_results" in st.session_state and st.session_state["kis_results"]:
         results = st.session_state["kis_results"]
         trans_q = st.session_state.get("kis_trans_q", "")
+        intent = st.session_state.get("kis_intent", {})
+        lat = st.session_state.get("kis_lat", 0.0)
 
-        if auto_translate and trans_q and trans_q != query_text.strip():
-            st.success(f"🌐 **Câu truy vấn tiếng Anh dịch tự động:** *\"{trans_q}\"*")
+        active_t = intent.get("active_track", engine_mode).upper()
+        if auto_translate and trans_q:
+            st.caption(f"🌐 Query dịch: \"{trans_q}\" | ⏱️ Độ trễ: {lat:.3f}s | 📍 Track: {active_t}")
 
-        st.markdown(f"### 🖼️ Kết quả Top {len(results)} khung hình tương đồng nhất:")
+        # Show deep diagnostic info
+        aspect_prompts = intent.get("aspect_prompts", {})
+        eff_asr = intent.get("effective_audio_weight", 0.0)
+        phases_list = intent.get("phases_en", [])
+        top1_item = results[0] if results else {}
 
-        # Bảng điều khiển xuất file nộp
-        with st.expander("📁 Tùy chọn xuất file nộp bài (Bước 8 - Submission CSV)", expanded=True):
-            exp_col1, exp_col2 = st.columns([3, 1])
-            with exp_col1:
-                sub_filename = st.text_input("Tên file nộp bài:", value=st.session_state.get("kis_sub_name", default_sub_name))
-            with exp_col2:
+        with st.expander(f"🔍 Bảng Chẩn đoán Kỹ thuật (Diagnostics) | Track [{active_t}] | Top-1 Tier: {top1_item.get('tier', 'N/A')} | CSR: {top1_item.get('csr', 1.0):.2f}", expanded=False):
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("**1. Phân rã 6D Semantic Aspect Prompts:**")
+                if isinstance(aspect_prompts, dict):
+                    for k, v in aspect_prompts.items():
+                        st.text(f"  [{k.upper()}] {v}")
+                if intent.get("anchors"):
+                    st.markdown(f"**2. Hard OCR Anchors:** `{', '.join(intent['anchors'])}`")
+            with c2:
+                if phases_list and len(phases_list) > 1:
+                    st.markdown("**3. Chuỗi thời gian (Monotonic DP Phases):**")
+                    for pi, p_txt in enumerate(phases_list):
+                        st.text(f"  Pha {pi+1}: {p_txt}")
+                st.markdown(f"**4. Lời thoại ASR:** `{'Bật (' + str(eff_asr) + ')' if eff_asr > 0 else 'Tắt'}`")
+
+        with st.expander("📥 Xuất file nộp bài (Submission CSV)", expanded=False):
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                sub_fn = st.text_input("Tên file CSV:", value=st.session_state.get("kis_sub_name", default_sub_name))
+            with c2:
                 st.write("")
                 st.write("")
-                if st.button("💾 Xuất toàn bộ Top vào CSV", type="primary", use_container_width=True):
-                    saved_path = exporter.export_kis(results, sub_filename, max_rows=100)
-                    st.success(f"✅ Đã tạo file nộp bài: `{saved_path}` (Tối đa 100 dòng)")
+                if st.button("Xuất CSV", use_container_width=True):
+                    p = exporter.export_kis(results, sub_fn, max_rows=100)
+                    st.success(f"Đã lưu: {p}")
 
-        # Grid ảnh
-        grid_cols = st.columns(cols_count)
+        st.markdown(f"### Kết quả Top {len(results)} khung hình")
+        grid = st.columns(cols_count)
         for i, item in enumerate(results):
-            col = grid_cols[i % cols_count]
+            col = grid[i % cols_count]
             with col:
-                st.markdown(f"**#{i+1}. 🎬 {item['video']} | Frame {item['frame']}**")
-
+                st.markdown(f"**#{i+1}. {item['video']} F{item['frame']}**")
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
-                        img = Image.open(item["image_path"])
-                        st.image(img, use_container_width=True)
-                    except Exception:
-                        st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
+                        st.image(Image.open(item["image_path"]), use_container_width=True)
+                    except Exception as e:
+                        st.text(f"(image error: {e})")
                 else:
-                    st.markdown(f'<div class="no-img-box">Ảnh chưa giải nén<br><b>{item["video"]}</b><br>Frame #{item["frame"]}</div>', unsafe_allow_html=True)
-
-                score_pct = item["score"] * 100
-                st.progress(max(0.0, min(1.0, float(item["score"]))))
-                st.caption(f"Cosine Score: **{score_pct:.2f}%**")
-                
-                if st.button("🎯 Chọn làm đáp án", key=f"kis_select_{i}", use_container_width=True):
-                    saved_path = exporter.export_kis([item], sub_filename, max_rows=1)
-                    st.success(f"✅ Đã lưu chính xác **{item['video']}, {item['frame']}** vào file `{saved_path}`")
-
+                    st.text(f"No image: {item['video']} F{item['frame']}")
+                tier_info = f"[{item.get('tier', 'TIER_4')}] "
+                st.caption(f"{tier_info}Score: {item.get('score', 0.0):.2f} (t={item.get('pts_time', 0.0):.1f}s)")
 
 # =========================================================================
-# 2. VISUAL QUESTION ANSWERING (Q&A)
+# QA
 # =========================================================================
-elif query_mode == "❓ Visual Q&A (Hỏi - Đáp)":
-    st.subheader("❓ Visual Question Answering (Q&A)")
-    st.info("Tìm khung hình liên quan và trả lời câu hỏi đề bài. Format: `<video_name>, <frame_idx>, <answer>` (answer <= 100 ký tự)")
+elif query_mode == "Visual QA":
+    st.subheader("Visual Question Answering (QA)")
 
-    col_select, col_custom = st.columns([1, 2])
-    with col_select:
-        selected_file = st.selectbox(
-            "Chọn file đề thi Q&A mẫu:",
-            ["(Nhập thủ công)"] + [f for f in test_files if "qa" in f.lower() or "txt" in f.lower()]
-        )
-
+    selected_file = st.selectbox("Tải file đề thi:", ["(Manual input)"] + [f for f in test_files if "qa" in f.lower()])
     default_query = ""
-    default_sub_name = "query-3-qa.csv"
-    if selected_file != "(Nhập thủ công)":
+    default_sub_name = "query-qa.csv"
+    if selected_file != "(Manual input)":
         try:
             with open(selected_file, "r", encoding="utf-8") as f:
                 default_query = f.read().strip()
-            base_name = os.path.splitext(os.path.basename(selected_file))[0]
-            default_sub_name = f"{base_name}.csv"
+            default_sub_name = os.path.splitext(os.path.basename(selected_file))[0] + ".csv"
         except Exception as e:
-            st.error(f"Lỗi đọc file: {e}")
+            st.error(f"Error: {e}")
 
-    qa_query_text = st.text_area(
-        "📝 Câu hỏi & Mô tả ngữ cảnh Q&A:",
-        value=default_query,
-        placeholder="Ví dụ: Đoạn video về một chương trình từ thiện của một câu lạc bộ tên là FANA...",
-        height=100
-    )
+    qa_text = st.text_area("Câu hỏi (Question):", value=default_query, height=100)
 
-    btn_search_qa = st.button("🚀 Tìm kiếm Keyframe cho câu hỏi Q&A", type="primary", use_container_width=True)
-
-    if btn_search_qa and qa_query_text.strip():
-        with st.spinner("Đang tìm kiếm keyframe..."):
-            results, trans_q = engine.search(
-                qa_query_text.strip(),
+    if st.button("🚀 Bắt đầu Tìm kiếm & Trả lời", type="primary", use_container_width=True) and qa_text.strip():
+        with st.spinner("Đang tìm kiếm bằng chứng và chuẩn hóa đáp án..."):
+            results, trans_q, intent = engine.search(
+                qa_text.strip(),
                 top_k=top_k,
                 video_filter=v_filter,
                 auto_translate=auto_translate,
-                audio_weight=audio_weight
+                engine_mode=engine_mode,
+                use_ai_query=(engine_mode in ["meta", "hybrid", "ai"]),
+                use_asr=use_asr,
+                audio_weight=audio_weight,
+                asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
+                diversity_top_2=diversity_top_2
             )
             st.session_state["qa_results"] = results
-            st.session_state["qa_trans_q"] = trans_q
+            st.session_state["qa_text"] = qa_text.strip()
             st.session_state["qa_sub_name"] = default_sub_name
 
     if "qa_results" in st.session_state and st.session_state["qa_results"]:
         results = st.session_state["qa_results"]
-        trans_q = st.session_state.get("qa_trans_q", "")
+        qa_q = st.session_state.get("qa_text", "")
 
-        if auto_translate and trans_q and trans_q != qa_query_text.strip():
-            st.success(f"🌐 **Câu truy vấn tiếng Anh dịch tự động:** *\"{trans_q}\"*")
+        top_ans = engine.answer_qa(qa_q, results[0])
+        st.info(f"💡 Đáp án dự đoán chuẩn hóa (Top-1 Answer): **{top_ans}**")
 
-        st.markdown(f"### 🖼️ Các khung hình ứng viên hàng đầu:")
+        with st.expander("📥 Xuất file nộp bài (Submission CSV)", expanded=False):
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                sub_fn = st.text_input("Tên file CSV:", value=st.session_state.get("qa_sub_name", default_sub_name))
+            with c2:
+                st.write("")
+                st.write("")
+                if st.button("Xuất CSV", use_container_width=True):
+                    qa_data = [{"video": r["video"], "frame": r["frame"], "answer": engine.answer_qa(qa_q, r)} for r in results]
+                    p = exporter.export_qa(qa_data, sub_fn, max_rows=100)
+                    st.success(f"Đã lưu: {p}")
 
-        # Khu vực nhập câu trả lời
-        st.markdown("#### ✍️ Nhập câu trả lời (Answer):")
-        ans_col1, ans_col2, ans_col3 = st.columns([2, 1, 1])
-        with ans_col1:
-            qa_answer = st.text_input("Nội dung câu trả lời (Tối đa 100 ký tự):", value="", placeholder="Đọc ảnh/lời thoại bên dưới rồi nhập câu trả lời...")
-            st.caption(f"Độ dài: {len(qa_answer)}/100 ký tự")
-        with ans_col2:
-            qa_sub_filename = st.text_input("Tên file nộp bài Q&A:", value=st.session_state.get("qa_sub_name", default_sub_name))
-        with ans_col3:
-            st.write("")
-            st.write("")
-            if st.button("💾 Xuất CSV Q&A", type="primary", use_container_width=True):
-                qa_submission_data = []
-                for item in results:
-                    qa_submission_data.append({
-                        "video": item["video"],
-                        "frame": item["frame"],
-                        "answer": qa_answer.strip()
-                    })
-                saved_path = exporter.export_qa(qa_submission_data, qa_sub_filename, max_rows=100)
-                st.success(f"✅ Đã xuất file Q&A: `{saved_path}`")
-
-        # Grid ảnh
-        grid_cols = st.columns(cols_count)
+        grid = st.columns(cols_count)
         for i, item in enumerate(results):
-            col = grid_cols[i % cols_count]
+            col = grid[i % cols_count]
             with col:
-                st.markdown(f"**#{i+1}. {item['video']} | Frame {item['frame']}**")
+                st.markdown(f"**#{i+1}. {item['video']} F{item['frame']}**")
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
-                        img = Image.open(item["image_path"])
-                        st.image(img, use_container_width=True)
-                    except Exception:
-                        st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
+                        st.image(Image.open(item["image_path"]), use_container_width=True)
+                    except Exception as e:
+                        st.text(f"(image error: {e})")
                 else:
-                    st.markdown(f'<div class="no-img-box">Ảnh chưa giải nén<br><b>{item["video"]}</b><br>Frame #{item["frame"]}</div>', unsafe_allow_html=True)
-
-                st.caption(f"Score: **{item['score']*100:.2f}%**")
-                
-                # Hiển thị lời thoại ASR gần keyframe này (giúp tìm đáp án Q&A)
-                asr_text = ""
-                if hasattr(engine, 'get_transcript_for_frame'):
-                    asr_text = engine.get_transcript_for_frame(item["index"])
-                elif hasattr(engine, 'keyframe_texts') and item["index"] < len(engine.keyframe_texts):
-                    asr_text = engine.keyframe_texts[item["index"]].strip()
-                if asr_text:
-                    with st.expander("🎤 Lời thoại gần frame này"):
-                        st.caption(asr_text[:500])
-                
-                if st.button("🎯 Chọn làm đáp án", key=f"qa_select_{i}", use_container_width=True):
-                    qa_sub = [{"video": item["video"], "frame": item["frame"], "answer": qa_answer.strip()}]
-                    saved_path = exporter.export_qa(qa_sub, qa_sub_filename, max_rows=1)
-                    st.success(f"✅ Đã lưu đáp án **{item['video']}, {item['frame']}** vào `{saved_path}`")
-
+                    st.text(f"No image")
+                tier_info = f"[{item.get('tier', 'TIER_4')}] "
+                st.caption(f"{tier_info}Score: {item.get('score', 0.0):.2f}")
 
 # =========================================================================
-# 3. TRAKE (TEMPORAL RETRIEVAL & ALIGNMENT OF KEY EVENTS)
+# TRAKE
 # =========================================================================
-elif query_mode == "⏱️ TRAKE (Chuỗi sự kiện video)":
-    st.subheader("⏱️ TRAKE: Chuỗi sự kiện video theo thời gian")
-    st.info("Tìm chuỗi N keyframe trong cùng 1 video tương ứng với N events và tuân theo thứ tự thời gian: `Frame_1 < Frame_2 < ... < Frame_N`. Format: `<video_name>, <frame_1>, <frame_2>, ..., <frame_N>`")
+elif query_mode == "TRAKE":
+    st.subheader("Temporal Action Keyframe Extraction (TRAKE)")
 
-    col_select, col_custom = st.columns([1, 2])
-    with col_select:
-        selected_file = st.selectbox(
-            "Chọn file đề thi TRAKE mẫu:",
-            ["(Nhập thủ công)"] + [f for f in test_files if "trake" in f.lower() or "txt" in f.lower()]
-        )
-
-    default_trake_text = ""
-    default_sub_name = "query-4-trake.csv"
-    if selected_file != "(Nhập thủ công)":
+    selected_file = st.selectbox("Tải file đề thi:", ["(Manual input)"] + [f for f in test_files if "trake" in f.lower()])
+    default_query = ""
+    default_sub_name = "query-trake.csv"
+    if selected_file != "(Manual input)":
         try:
             with open(selected_file, "r", encoding="utf-8") as f:
-                default_trake_text = f.read().strip()
-            base_name = os.path.splitext(os.path.basename(selected_file))[0]
-            default_sub_name = f"{base_name}.csv"
+                default_query = f.read().strip()
+            default_sub_name = os.path.splitext(os.path.basename(selected_file))[0] + ".csv"
         except Exception as e:
-            st.error(f"Lỗi đọc file: {e}")
+            st.error(f"Error: {e}")
 
-    trake_input = st.text_area(
-        "📝 Nội dung đề bài TRAKE (Gồm mô tả chung và các dòng E1, E2, E3...):",
-        value=default_trake_text,
-        placeholder="Đoạn video múa lân...\nE1: Lân quay vòng trên cột...\nE2: Khoảnh khắc 4 chân chạm đất...\nE3: 2 người biểu diễn cúi chào...",
-        height=150
-    )
+    trake_text = st.text_area("Danh sách sự kiện (E1, E2, ...):", value=default_query, height=150)
 
-    btn_search_trake = st.button("🚀 Bắt đầu căn chỉnh chuỗi sự kiện (TRAKE Search)", type="primary", use_container_width=True)
-
-    if btn_search_trake and trake_input.strip():
-        lines = [line.strip() for line in trake_input.strip().split("\n") if line.strip()]
-        event_queries = []
-        for line in lines:
-            if re.match(r"^E\d+[:.]", line, re.IGNORECASE):
-                content = re.sub(r"^E\d+[:.]\s*", "", line, flags=re.IGNORECASE)
-                event_queries.append(content)
-            elif len(lines) > 1 and line != lines[0]:
-                event_queries.append(line)
-        
+    if st.button("🚀 Bắt đầu Định vị Sự kiện", type="primary", use_container_width=True) and trake_text.strip():
+        lines = [l.strip() for l in trake_text.split("\n") if l.strip()]
+        event_queries = [
+            re.sub(r"^E\d+[:.]\s*", "", l, flags=re.IGNORECASE)
+            for l in lines if re.match(r"^E\d+[:.]", l, re.IGNORECASE)
+        ]
         if not event_queries:
-            event_queries = lines
+            event_queries = lines[1:] if len(lines) > 1 else lines
 
-        st.write(f"📌 Đã nhận diện **{len(event_queries)} events**:")
-        for idx, eq in enumerate(event_queries):
-            st.markdown(f"- **Event {idx+1}:** {eq}")
-
-        with st.spinner("Đang tìm kiếm và căn chỉnh chuỗi thời gian..."):
-            trake_results, trans_events = engine.search_trake(
+        with st.spinner("Đang thực thi 3-Stage Temporal Refinement..."):
+            trake_res, proc_events = engine.search_trake(
                 event_queries,
                 top_k_videos=10,
                 video_filter=v_filter,
-                auto_translate=auto_translate
+                auto_translate=auto_translate,
+                use_ai_query=(engine_mode in ["meta", "hybrid", "ai"])
             )
-            st.session_state["trake_results"] = trake_results
+            st.session_state["trake_results"] = trake_res
             st.session_state["trake_sub_name"] = default_sub_name
 
     if "trake_results" in st.session_state and st.session_state["trake_results"]:
-        trake_results = st.session_state["trake_results"]
+        trake_res = st.session_state["trake_results"]
 
-        st.markdown("### 🎬 Danh sách Video & Chuỗi Keyframe phù hợp:")
-
-        with st.expander("📁 Xuất file nộp bài TRAKE", expanded=True):
-            sub_col1, sub_col2 = st.columns([3, 1])
-            with sub_col1:
-                trake_sub_filename = st.text_input("Tên file CSV:", value=st.session_state.get("trake_sub_name", default_sub_name))
-            with sub_col2:
+        with st.expander("📥 Xuất file nộp bài (Submission CSV)", expanded=False):
+            c1, c2 = st.columns([3, 1])
+            with c1:
+                sub_fn = st.text_input("Tên file CSV:", value=st.session_state.get("trake_sub_name", default_sub_name))
+            with c2:
                 st.write("")
                 st.write("")
-                if st.button("💾 Xuất CSV TRAKE", type="primary", use_container_width=True):
-                    saved_path = exporter.export_trake(trake_results, trake_sub_filename, max_rows=100)
-                    st.success(f"✅ Đã tạo file TRAKE: `{saved_path}`")
+                if st.button("Xuất CSV", use_container_width=True):
+                    p = exporter.export_trake(trake_res, sub_fn, max_rows=100)
+                    st.success(f"Đã lưu: {p}")
 
-        for r_idx, res in enumerate(trake_results):
-            vname = res["video"]
-            frames = res["frames"]
-            st.markdown(f"#### #{r_idx+1}. Video: `{vname}` (Tổng điểm: {res['total_score']:.3f})")
-            
-            f_cols = st.columns(len(frames))
-            for e_idx, f_info in enumerate(frames):
-                with f_cols[e_idx]:
-                    st.markdown(f"**Event {e_idx+1} | Frame {f_info['frame']}**")
-                    if f_info["image_path"] and os.path.exists(f_info["image_path"]):
+        for r_idx, v_item in enumerate(trake_res):
+            if not v_item.get("frames"):
+                continue
+            st.markdown(f"#### #{r_idx+1}. {v_item['video']} (DP Score: {v_item['total_score']:.3f} | C_temp: {v_item.get('temporal_confidence', 0.9):.2f})")
+            t_cols = st.columns(len(v_item["frames"]))
+            for f_idx, f_data in enumerate(v_item["frames"]):
+                with t_cols[f_idx]:
+                    st.markdown(f"**E{f_idx+1}: F{f_data['frame']}** (t={f_data['pts_time']:.1f}s)")
+                    if f_data["image_path"] and os.path.exists(f_data["image_path"]):
                         try:
-                            img = Image.open(f_info["image_path"])
-                            st.image(img, use_container_width=True)
-                        except Exception:
-                            st.markdown('<div class="no-img-box">Lỗi load ảnh</div>', unsafe_allow_html=True)
+                            st.image(Image.open(f_data["image_path"]), use_container_width=True)
+                        except Exception as e:
+                            st.text(f"(image error: {e})")
                     else:
-                        st.markdown(f'<div class="no-img-box">Ảnh chưa giải nén<br><b>{vname}</b><br>Frame #{f_info["frame"]}</div>', unsafe_allow_html=True)
-                    st.caption(f"Score: {f_info['score']*100:.1f}%")
+                        st.text(f"F{f_data['frame']}")
             st.divider()
 
-
 # =========================================================================
-# 4. BATCH PROCESSING / AUTO RUNNER
+# BATCH
 # =========================================================================
-elif query_mode == "⚡ Batch Processing (Xử lý hàng loạt)":
-    st.subheader("⚡ Xử lý tự động toàn bộ gói đề thi (Batch Runner)")
-    st.info("Tự động duyệt tất cả các file .txt trong thư mục đề thi, phân loại (KIS / QA / TRAKE) và xuất toàn bộ file .csv vào thư mục `submission/` theo đúng quy chuẩn Bước 8.")
+elif query_mode == "Batch Processing":
+    st.subheader("Xử lý hàng loạt toàn bộ bộ đề thi (Batch Processing)")
 
-    dir_input = st.text_input("Thư mục chứa đề thi:", value="THUNGHIEM-bo-de-thi")
+    batch_dir = st.text_input("Thư mục đề thi:", value="de-thi" if os.path.exists("de-thi") else "THUNGHIEM-bo-de-thi")
 
-    if st.button("🔥 Chạy toàn bộ đề thi & Xuất file Submission", type="primary"):
-        if not os.path.exists(dir_input):
-            st.error(f"Không tìm thấy thư mục: {dir_input}")
+    if st.button("🚀 Chạy Batch toàn bộ", type="primary", use_container_width=True):
+        if not os.path.exists(batch_dir):
+            st.error(f"Thư mục không tồn tại: {batch_dir}")
         else:
-            txt_files = sorted(glob.glob(os.path.join(dir_input, "*.txt")))
-            st.write(f"Tìm thấy **{len(txt_files)} file** đề thi.")
+            q_files = sorted(glob.glob(os.path.join(batch_dir, "*.txt")))
+            st.write(f"Tìm thấy {len(q_files)} file đề thi.")
+            progress = st.progress(0.0)
+            status = st.empty()
 
-            progress_bar = st.progress(0.0)
-            summary_list = []
+            from main_pipeline import process_query_file
 
-            for i, txt_path in enumerate(txt_files):
-                fname = os.path.basename(txt_path)
-                base_name = os.path.splitext(fname)[0]
-                csv_name = f"{base_name}.csv"
+            for i, qf in enumerate(q_files):
+                status.text(f"Đang xử lý ({i+1}/{len(q_files)}): {os.path.basename(qf)}")
+                process_query_file(
+                    qf, engine, exporter,
+                    top_k=top_k,
+                    engine_mode=engine_mode,
+                    use_ai_query=(engine_mode in ["meta", "hybrid", "ai"]),
+                    use_asr=use_asr,
+                    audio_weight=audio_weight
+                )
+                progress.progress((i + 1) / len(q_files))
 
-                with open(txt_path, "r", encoding="utf-8") as f:
-                    content = f.read().strip()
-
-                if "trake" in fname.lower():
-                    lines = [l.strip() for l in content.split("\n") if l.strip()]
-                    eqs = [re.sub(r"^E\d+[:.]\s*", "", l, flags=re.IGNORECASE) for l in lines if re.match(r"^E\d+[:.]", l, re.IGNORECASE)]
-                    if not eqs:
-                        eqs = lines
-                    trake_res, _ = engine.search_trake(eqs, top_k_videos=100, auto_translate=auto_translate)
-                    out_path = exporter.export_trake(trake_res, csv_name)
-                    summary_list.append({"File đề": fname, "Loại": "TRAKE", "Số dòng": len(trake_res), "File CSV": csv_name})
-
-                elif "qa" in fname.lower():
-                    res, _ = engine.search(content, top_k=100, auto_translate=auto_translate, audio_weight=audio_weight)
-                    qa_data = [{"video": r["video"], "frame": r["frame"], "answer": "yes"} for r in res]
-                    out_path = exporter.export_qa(qa_data, csv_name)
-                    summary_list.append({"File đề": fname, "Loại": "Q&A", "Số dòng": len(qa_data), "File CSV": csv_name})
-
-                else:
-                    res, _ = engine.search(content, top_k=100, auto_translate=auto_translate, audio_weight=audio_weight)
-                    out_path = exporter.export_kis(res, csv_name)
-                    summary_list.append({"File đề": fname, "Loại": "KIS", "Số dòng": len(res), "File CSV": csv_name})
-
-                progress_bar.progress((i + 1) / len(txt_files))
-
-            st.success(f"🎉 Hoàn thành xử lý {len(txt_files)} câu hỏi!")
-            st.dataframe(pd.DataFrame(summary_list))
-
-
-# =========================================================================
-# 5. GOOGLE DRIVE DOWNLOADER
-# =========================================================================
-elif query_mode == "📥 Tải dữ liệu từ Google Drive (gdown)":
-    st.subheader("📥 Tải dữ liệu & Keyframes từ Google Drive")
-    st.info("Nhập link Google Drive chứa file Keyframes (.zip) hoặc file CLIP Features do BTC cung cấp. Hệ thống sẽ tự động tải về và giải nén trực tiếp vào thư mục dự án.")
-
-    drive_url = st.text_input("🔗 Nhập Link chia sẻ hoặc File ID từ Google Drive:", placeholder="https://drive.google.com/file/d/...")
-    
-    col_d1, col_d2 = st.columns([1, 1])
-    with col_d1:
-        custom_out = st.text_input("Tên file lưu lại (để trống nếu lấy tên gốc):", placeholder="Ví dụ: Keyframes_L22.zip")
-    with col_d2:
-        auto_unzip_opt = st.checkbox("📦 Tự động giải nén file .zip sau khi tải xong", value=True)
-
-    if st.button("🚀 Bắt đầu tải từ Google Drive", type="primary"):
-        if not drive_url.strip():
-            st.warning("Vui lòng nhập link Google Drive hợp lệ!")
-        else:
-            try:
-                from utils.download_from_drive import download_file_from_drive
-                with st.spinner("Đang kết nối và tải file từ Google Drive (gdown)..."):
-                    res_path = download_file_from_drive(
-                        drive_url.strip(),
-                        output_path=custom_out.strip() if custom_out.strip() else None,
-                        auto_unzip=auto_unzip_opt
-                    )
-                st.success(f"✅ Tải thành công! Dữ liệu đã lưu tại: `{res_path}`")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Lỗi khi tải từ Google Drive: {e}")
-
+            zip_path = exporter.zip_submissions("submission.zip")
+            st.success(f"Hoàn tất! Đã lưu toàn bộ CSV và đóng gói ZIP: {zip_path}")

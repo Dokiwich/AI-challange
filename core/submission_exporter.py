@@ -1,5 +1,7 @@
 import os
 import csv
+import zipfile
+import glob
 from typing import List, Tuple, Dict, Any
 
 class SubmissionExporter:
@@ -135,3 +137,21 @@ class SubmissionExporter:
 
         print(f"[Exporter] Đã ghi {len(rows)} dòng vào '{filepath}'")
         return filepath
+
+    def zip_submissions(self, zip_filepath: str = "submission.zip") -> str:
+        """
+        Nén toàn bộ các file .csv trong thư mục submission thành 1 file .zip nộp bài
+        """
+        csv_files = sorted(glob.glob(os.path.join(self.submission_dir, "*.csv")))
+        if not csv_files:
+            print(f"[Exporter] Cảnh báo: Không tìm thấy file .csv nào trong '{self.submission_dir}'")
+            return ""
+
+        with zipfile.ZipFile(zip_filepath, "w", zipfile.ZIP_DEFLATED) as zipf:
+            for file_path in csv_files:
+                arcname = os.path.basename(file_path)
+                zipf.write(file_path, arcname)
+
+        print(f"[Exporter] ✅ Đã nén thành công {len(csv_files)} file CSV vào '{zip_filepath}'")
+        return zip_filepath
+
