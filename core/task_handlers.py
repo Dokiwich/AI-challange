@@ -105,7 +105,7 @@ class TRAKE3StageLocalizer:
                 for idx in v_indices
             ])
 
-            best_score, best_path, _, c_temp = self.temporal_engine.align_sequence_monotonic_dp(
+            best_score, best_path, _, c_temp, _ = self.temporal_engine.align_sequence_monotonic_dp(
                 score_matrix, v_timestamps, gap_type="SHORT"
             )
 
@@ -144,3 +144,81 @@ class TRAKE3StageLocalizer:
 
         trake_results.sort(key=lambda x: x["total_score"], reverse=True)
         return trake_results[:top_k_videos]
+
+class QAHandler:
+    """Xử lý truy vấn QA theo chuẩn AIC 2026: Joint Ranking Top-100 Answers"""
+    
+    def __init__(self, vlm_endpoint: Optional[str] = None):
+        self.vlm_endpoint = vlm_endpoint
+        self.normalizer = QAnswerNormalizer()
+        
+    def _fast_deterministic_extract(self, item: Dict[str, Any], query_en: str, constraints: List[Any]) -> Tuple[Optional[str], float]:
+        """Giả lập Fast Extractor (OCR/CV/Rules). Trả về (Answer, Confidence)"""
+        # Giả lập OCR có confidence cao nếu frame khớp mạnh với câu có số
+        has_num = any(ch.isdigit() for ch in query_en)
+        if has_num and item.get("score", 0.0) > 0.8:
+            # Mô phỏng đọc ra 1 số
+            return "5", 0.95
+            
+        # Giả lập OCR mờ / không chắc chắn
+        if has_num and 0.5 < item.get("score", 0.0) <= 0.8:
+            return "O5", 0.45
+            
+        return None, 0.0
+
+    def _vlm_verifier(self, item: Dict[str, Any], query_en: str) -> Dict[str, Any]:
+        """Giả lập gọi VLM (LLM Vision) trả về cấu trúc JSON"""
+        # Trong thực tế, sẽ truyền image_path và query_en vào LLM Vision API
+        return {
+            "answer": "yes" if "is there" in query_en.lower() else "unknown",
+            "confidence": 0.85,
+            "evidence_supported": True
+        }
+
+    def process_qa_candidates(
+        self,
+        candidates: List[Dict[str, Any]],
+        query_en: str,
+        intent_flags: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Quy trình QA: Fast Extractor -> Confidence Gate -> Selective VLM -> Joint Score Rank 100
+        """
+        results = []
+        constraints = intent_flags.get("constraints", [])
+        
+        for item in candidates:
+            retrieval_score = float(item.get("final_score", item.get("score", 0.0)))
+            evidence_score = float(item.get("cec", 0.5))
+            
+            # 1. Fast Extractor
+            ans_ext, conf_ext = self._fast_deterministic_extract(item, query_en, constraints)
+            
+            final_answer = ans_ext
+            final_conf = conf_ext
+            used_vlm = False
+            
+            # 2. Confidence & Evidence Gate
+            # Kích hoạt VLM nếu Fast Extractor tự tin thấp hoặc không trích xuất được
+            if conf_ext < 0.80 or not final_answer:
+                vlm_res = self._vlm_verifier(item, query_en)
+                final_answer = vlm_res.get("answer", "yes")
+                final_conf = vlm_res.get("confidence", 0.5)
+                used_vlm = True
+                
+            final_answer = self.normalizer.normalize_answer(final_answer)
+            
+            # 3. Joint Score (alpha=0.4, beta=0.2, gamma=0.4)
+            joint_score = (0.4 * (retrieval_score / 10000.0)) + (0.2 * evidence_score) + (0.4 * final_conf)
+            
+            # Lưu kết quả
+            res_item = dict(item)
+            res_item["qa_answer"] = final_answer
+            res_item["qa_confidence"] = final_conf
+            res_item["joint_score"] = float(joint_score)
+            res_item["used_vlm"] = used_vlm
+            results.append(res_item)
+            
+        # 4. Joint Score Ranking (Re-rank)
+        results.sort(key=lambda x: x["joint_score"], reverse=True)
+        return results[:100]

@@ -6,7 +6,7 @@ from .query_compiler import QueryCompiler
 from .temporal_alignment import TemporalAlignmentEngine
 from .base_retriever import BaseVisualRetriever, CLIPVisualRetriever
 from .meta_router import MetaRouter, MetaFeatureVector
-from .semantic_ir import CommonSemanticIR, EntityNode, RelationNode, AspectPromptNode, TemporalPhaseNode
+from .semantic_ir import CommonSemanticIR, AspectPromptNode, TemporalPhaseNode
 from .task_handlers import QAnswerNormalizer, TRAKE3StageLocalizer
 
 __all__ = [
@@ -21,8 +21,6 @@ __all__ = [
     "MetaRouter",
     "MetaFeatureVector",
     "CommonSemanticIR",
-    "EntityNode",
-    "RelationNode",
     "AspectPromptNode",
     "TemporalPhaseNode",
     "QAnswerNormalizer",

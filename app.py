@@ -10,7 +10,7 @@ from core.submission_exporter import SubmissionExporter
 
 st.set_page_config(page_title="AIC 2026 Video Retrieval", layout="wide", initial_sidebar_state="expanded")
 
-_ENGINE_VERSION = 14
+_ENGINE_VERSION = 15
 if st.session_state.get("_engine_ver") != _ENGINE_VERSION:
     for k in [k for k in st.session_state if k.startswith(("kis_", "qa_", "trake_"))]:
         del st.session_state[k]
@@ -36,41 +36,57 @@ query_mode = st.sidebar.radio("Tác vụ thi đấu (Task):", [
 ])
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 🏎️ Kiến trúc 4 Hướng (4-Track Selector)")
+st.sidebar.markdown("### 🤖 Chế độ AI (AI Mode)")
 
-track_choice = st.sidebar.selectbox(
-    "Chọn Engine Mode:",
-    [
-        "🧠 Track 4: Adaptive Meta-Policy (Khuyên dùng)",
-        "🌟 Track 3: Hybrid Fusion (Late Retrieval)",
-        "⚡ Track 1: Offline V2 (Zero-LLM Cục bộ)",
-        "🤖 Track 2: AI Semantic V2 (Thuần LLM)"
-    ],
-    index=0,
-    help="Track 4 tự động định tuyến thông minh tối ưu tốc độ và độ chính xác cho từng loại câu hỏi."
+# NÚT BẬT / TẮT MODE AI CHÍNH
+enable_ai_mode = st.sidebar.toggle(
+    "⚡ Kích hoạt Chế độ AI (LLM / 9Router)",
+    value=st.session_state.get("enable_ai_mode", True),
+    key="enable_ai_mode_toggle",
+    help="Bật để AI phân tích cấu trúc 6D ngữ nghĩa, bóc tách hành động cốt lõi, sinh giả thuyết và định tuyến thông minh."
 )
+st.session_state["enable_ai_mode"] = enable_ai_mode
 
-track_mode_map = {
-    "🧠 Track 4: Adaptive Meta-Policy (Khuyên dùng)": "meta",
-    "🌟 Track 3: Hybrid Fusion (Late Retrieval)": "hybrid",
-    "⚡ Track 1: Offline V2 (Zero-LLM Cục bộ)": "offline",
-    "🤖 Track 2: AI Semantic V2 (Thuần LLM)": "ai"
-}
-engine_mode = track_mode_map[track_choice]
+if enable_ai_mode:
+    st.sidebar.markdown("#### 🏎️ Chọn AI Engine Policy:")
+    track_choice = st.sidebar.selectbox(
+        "Engine Track:",
+        [
+            "🧠 Track 4: Adaptive Meta-Policy (Khuyên dùng)",
+            "🌟 Track 3: Hybrid Fusion (Late Retrieval)",
+            "🤖 Track 2: AI Semantic V2 (Thuần LLM)"
+        ],
+        index=0,
+        help="Track 4 tự động định tuyến thông minh tối ưu tốc độ và độ chính xác cho từng loại câu hỏi."
+    )
+    track_mode_map = {
+        "🧠 Track 4: Adaptive Meta-Policy (Khuyên dùng)": "meta",
+        "🌟 Track 3: Hybrid Fusion (Late Retrieval)": "hybrid",
+        "🤖 Track 2: AI Semantic V2 (Thuần LLM)": "ai"
+    }
+    engine_mode = track_mode_map[track_choice]
 
-# Cấu hình LLM nếu dùng Track 2, 3 hoặc 4
-if engine_mode in ["meta", "hybrid", "ai"]:
-    st.sidebar.markdown("#### 🤖 Cấu hình AI Semantic Compiler")
-    ai_connected = engine.compiler.ai_parser.check_connection()
-    st.sidebar.caption(f"Trạng thái: {'🟢 Online (9Router)' if ai_connected else '🔴 Offline / Dự phòng cục bộ'}")
+    col_status, col_btn = st.sidebar.columns([3, 1])
+    force_check = False
+    with col_btn:
+        if st.button("🔄", help="Kiểm tra lại kết nối 9Router / LLM"):
+            force_check = True
+
+    ai_connected = engine.compiler.ai_parser.check_connection(force=force_check)
+    with col_status:
+        st.caption(f"Trạng thái: {'🟢 Online (9Router)' if ai_connected else '🔴 Offline / Fallback Cục bộ'}")
+
     if ai_connected:
         available_models = engine.compiler.ai_parser.get_available_models()
         curr_model = engine.compiler.ai_parser.model_name
         default_idx = available_models.index(curr_model) if curr_model in available_models else 0
         selected_model = st.sidebar.selectbox("AI Model:", available_models, index=default_idx)
         engine.compiler.ai_parser.model_name = selected_model
+    else:
+        st.sidebar.caption("⚠️ Không kết nối được 9Router. Hệ thống sẽ tự động dùng bộ dịch Google và phân tích cục bộ.")
 else:
-    st.sidebar.caption("⚡ Track 1 đang hoạt động: 100% Cục bộ không phụ thuộc LLM.")
+    engine_mode = "offline"
+    st.sidebar.info("⚡ **Track 1: Offline V2 (Cục bộ 100% - Zero LLM)** đang bật.\nTốc độ phản hồi cực nhanh, không phụ thuộc vào internet hoặc mô hình LLM.")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 🎙️ Lời thoại ASR (Thủ công)")
@@ -124,16 +140,87 @@ if query_mode == "Textual KIS":
 
     query_text = st.text_area("Nội dung truy vấn (Query):", value=default_query, height=100)
 
-    if st.button("🚀 Bắt đầu Tìm kiếm", type="primary", use_container_width=True) and query_text.strip():
+    # KHU VỰC ĐIỀU KHIỂN MODE AI & TÌM KIẾM
+    c_toggle, c_mode_badge = st.columns([2, 2])
+    with c_toggle:
+        kis_use_ai = st.toggle("🤖 Bật AI Semantic Mode cho truy vấn này", value=enable_ai_mode, key="kis_use_ai_toggle")
+    with c_mode_badge:
+        if kis_use_ai:
+            st.caption(f"Trạng thái: 🤖 **AI Mode ({engine_mode.upper()})** | Model: `{engine.compiler.ai_parser.model_name}`")
+        else:
+            st.caption("Trạng thái: ⚡ **Offline V2 (Zero-LLM Cục bộ)**")
+
+    c_b1, c_b2, c_b3 = st.columns([3, 3, 2])
+    btn_ai_search = c_b1.button("🤖 Tìm kiếm với AI (Deep)", type="primary" if kis_use_ai else "secondary", use_container_width=True)
+    btn_fast_search = c_b2.button("⚡ Tìm kiếm Nhanh (Offline)", type="secondary" if kis_use_ai else "primary", use_container_width=True)
+    btn_inspect = c_b3.button("🧠 Phân tích AI", use_container_width=True, help="Xem cấu trúc 6D & Event Graph do LLM trích xuất mà không cần chạy tìm kiếm toàn bộ video")
+
+    # Xử lý xem trước phân tích AI
+    if btn_inspect and query_text.strip():
+        with st.spinner("Đang gọi AI Semantic Compiler để trích xuất Event Graph..."):
+            ai_decomp = engine.compiler.compile_query(
+                query_text.strip(),
+                auto_translate=auto_translate,
+                use_ai_query=True,
+                engine_mode="ai"
+            )
+            st.session_state["kis_inspect_data"] = ai_decomp
+
+    if "kis_inspect_data" in st.session_state:
+        insp = st.session_state["kis_inspect_data"]
+        with st.expander("🧠 Bảng cấu trúc Ngữ nghĩa AI (Semantic Event Graph Preview)", expanded=True):
+            st.markdown(f"**English Translated Query:** `{insp.get('query_en')}`")
+            col_i1, col_i2 = st.columns(2)
+            with col_i1:
+                st.markdown("**Core Events (Hành động cốt lõi):**")
+                ce_list = insp.get("intent_flags", {}).get("core_events", [])
+                if ce_list:
+                    for ce in ce_list:
+                        st.markdown(f"- 🎯 `{ce}`")
+                else:
+                    st.caption("Không phát hiện action cụ thể.")
+
+                st.markdown("**Support Facts (Đồ vật & Bối cảnh nền):**")
+                sf_list = insp.get("intent_flags", {}).get("support_facts", [])
+                if sf_list:
+                    for sf in sf_list:
+                        st.markdown(f"- 📦 `{sf}`")
+                else:
+                    st.caption("Không có support facts.")
+
+            with col_i2:
+                st.markdown("**Temporal Phases (Chuỗi thời gian):**")
+                ph_list = insp.get("phases_en", [])
+                for pi, ph in enumerate(ph_list):
+                    st.markdown(f"- **Pha {pi+1}:** `{ph}`")
+
+                anchors = insp.get("intent_flags", {}).get("anchors", [])
+                if anchors:
+                    st.markdown(f"**Hard OCR Anchors:** `{', '.join(anchors)}`")
+
+            st.json(insp.get("aspect_prompts", {}))
+
+    # Thực thi tìm kiếm KIS
+    do_search = False
+    search_with_ai = kis_use_ai
+    if btn_ai_search:
+        do_search = True
+        search_with_ai = True
+    elif btn_fast_search:
+        do_search = True
+        search_with_ai = False
+
+    if do_search and query_text.strip():
         t0 = time.time()
-        with st.spinner("Đang xử lý qua 4-Stage Precision Pipeline..."):
+        curr_active_mode = engine_mode if search_with_ai else "offline"
+        with st.spinner(f"Đang xử lý ({'AI Mode: ' + curr_active_mode.upper() if search_with_ai else 'Offline Zero-LLM'})..."):
             results, trans_q, intent = engine.search(
                 query_text.strip(),
                 top_k=top_k,
                 video_filter=v_filter,
                 auto_translate=auto_translate,
-                engine_mode=engine_mode,
-                use_ai_query=(engine_mode in ["meta", "hybrid", "ai"]),
+                engine_mode=curr_active_mode,
+                use_ai_query=search_with_ai,
                 use_asr=use_asr,
                 audio_weight=audio_weight,
                 asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
@@ -145,38 +232,91 @@ if query_mode == "Textual KIS":
             st.session_state["kis_intent"] = intent
             st.session_state["kis_sub_name"] = default_sub_name
             st.session_state["kis_lat"] = lat
+            st.session_state["kis_used_ai"] = search_with_ai
 
     if "kis_results" in st.session_state and st.session_state["kis_results"]:
         results = st.session_state["kis_results"]
         trans_q = st.session_state.get("kis_trans_q", "")
         intent = st.session_state.get("kis_intent", {})
         lat = st.session_state.get("kis_lat", 0.0)
+        was_ai = st.session_state.get("kis_used_ai", True)
 
         active_t = intent.get("active_track", engine_mode).upper()
+        mode_badge = f"🤖 AI Semantic ({active_t})" if was_ai else "⚡ Offline V2 (Zero-LLM)"
         if auto_translate and trans_q:
-            st.caption(f"🌐 Query dịch: \"{trans_q}\" | ⏱️ Độ trễ: {lat:.3f}s | 📍 Track: {active_t}")
+            st.caption(f"🌐 Query dịch: \"{trans_q}\" | ⏱️ Độ trễ: {lat:.3f}s | 📍 Chế độ: **{mode_badge}**")
 
-        # Show deep diagnostic info
+        # Nút chuyển đổi nhanh nếu vừa tìm Offline
+        if not was_ai:
+            col_re1, col_re2 = st.columns([3, 1])
+            with col_re1:
+                st.info("💡 Bạn vừa tìm kiếm bằng chế độ Offline Cục bộ. Để có độ chính xác cao hơn với phân tích chuỗi thời gian & hành động, bạn có thể thử lại với AI.")
+            with col_re2:
+                if st.button("🤖 Thử lại với AI Mode", type="primary", use_container_width=True):
+                    with st.spinner("Đang tìm kiếm lại với AI Semantic Compiler..."):
+                        t0 = time.time()
+                        results, trans_q, intent = engine.search(
+                            query_text.strip(),
+                            top_k=top_k,
+                            video_filter=v_filter,
+                            auto_translate=auto_translate,
+                            engine_mode=engine_mode,
+                            use_ai_query=True,
+                            use_asr=use_asr,
+                            audio_weight=audio_weight,
+                            asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
+                            diversity_top_2=diversity_top_2
+                        )
+                        st.session_state["kis_results"] = results
+                        st.session_state["kis_trans_q"] = trans_q
+                        st.session_state["kis_intent"] = intent
+                        st.session_state["kis_lat"] = time.time() - t0
+                        st.session_state["kis_used_ai"] = True
+                        st.rerun()
+
+        # Show deep diagnostic info V3.2
         aspect_prompts = intent.get("aspect_prompts", {})
         eff_asr = intent.get("effective_audio_weight", 0.0)
         phases_list = intent.get("phases_en", [])
+        core_events = intent.get("core_events", [])
+        support_facts = intent.get("support_facts", [])
         top1_item = results[0] if results else {}
 
-        with st.expander(f"🔍 Bảng Chẩn đoán Kỹ thuật (Diagnostics) | Track [{active_t}] | Top-1 Tier: {top1_item.get('tier', 'N/A')} | CSR: {top1_item.get('csr', 1.0):.2f}", expanded=False):
+        top1_tier = top1_item.get('tier', 'N/A')
+        top1_cec = top1_item.get('cec', 0.0)
+        top1_ambig = top1_item.get('is_ambiguous', False)
+        ambig_str = "⚠️ AMBIGUOUS" if top1_ambig else "🎯 CONFIDENT"
+
+        with st.expander(f"🔍 Bảng Chẩn đoán Chứng cứ (Evidence Judge V3.2) | Track [{active_t}] | {top1_tier} | CEC: {top1_cec:.2f} | {ambig_str}", expanded=False):
             c1, c2 = st.columns(2)
             with c1:
-                st.markdown("**1. Phân rã 6D Semantic Aspect Prompts:**")
-                if isinstance(aspect_prompts, dict):
-                    for k, v in aspect_prompts.items():
-                        st.text(f"  [{k.upper()}] {v}")
+                st.markdown("**1. Core Events (Hành động sống còn):**")
+                if core_events:
+                    for ce in core_events:
+                        st.text(f"  • [ACTION] {ce}")
+                else:
+                    st.text("  • General scene action")
+
+                st.markdown("**2. Support Facts (Bối cảnh nền):**")
+                if support_facts:
+                    for sf in support_facts:
+                        st.text(f"  • [FACT] {sf}")
+                else:
+                    st.text("  • No explicit support facts")
+
                 if intent.get("anchors"):
-                    st.markdown(f"**2. Hard OCR Anchors:** `{', '.join(intent['anchors'])}`")
+                    st.markdown(f"**3. Hard OCR Anchors:** `{', '.join(intent['anchors'])}`")
             with c2:
                 if phases_list and len(phases_list) > 1:
-                    st.markdown("**3. Chuỗi thời gian (Monotonic DP Phases):**")
+                    st.markdown("**4. Chuỗi pha thời gian (Skip-Aware DP):**")
                     for pi, p_txt in enumerate(phases_list):
                         st.text(f"  Pha {pi+1}: {p_txt}")
-                st.markdown(f"**4. Lời thoại ASR:** `{'Bật (' + str(eff_asr) + ')' if eff_asr > 0 else 'Tắt'}`")
+                st.markdown(f"**5. Lời thoại ASR:** `{'Bật (' + str(eff_asr) + ')' if eff_asr > 0 else 'Tắt'}`")
+                
+                trace = top1_item.get("evidence_trace", {})
+                if trace:
+                    st.markdown("**6. Query-to-Evidence Trace (Top-1):**")
+                    st.json(trace)
 
         with st.expander("📥 Xuất file nộp bài (Submission CSV)", expanded=False):
             c1, c2 = st.columns([3, 1])
@@ -202,8 +342,11 @@ if query_mode == "Textual KIS":
                         st.text(f"(image error: {e})")
                 else:
                     st.text(f"No image: {item['video']} F{item['frame']}")
-                tier_info = f"[{item.get('tier', 'TIER_4')}] "
-                st.caption(f"{tier_info}Score: {item.get('score', 0.0):.2f} (t={item.get('pts_time', 0.0):.1f}s)")
+                
+                tier_str = item.get("tier", "TIER_4")
+                tier_badge = "✅ " if tier_str == "TIER_0" else ("🔒 " if "TIER" in str(tier_str) else "")
+                ambig_mark = " ⚠️" if item.get("is_ambiguous") else ""
+                st.caption(f"{tier_badge}[{tier_str}{ambig_mark}] CEC: {item.get('cec', 0.0):.2f} | Score: {item.get('score', 0.0):.1f} (t={item.get('pts_time', 0.0):.1f}s)")
 
 # =========================================================================
 # QA
@@ -224,15 +367,38 @@ elif query_mode == "Visual QA":
 
     qa_text = st.text_area("Câu hỏi (Question):", value=default_query, height=100)
 
-    if st.button("🚀 Bắt đầu Tìm kiếm & Trả lời", type="primary", use_container_width=True) and qa_text.strip():
+    c_toggle, c_mode_badge = st.columns([2, 2])
+    with c_toggle:
+        qa_use_ai = st.toggle("🤖 Bật AI Mode cho câu hỏi này", value=enable_ai_mode, key="qa_use_ai_toggle")
+    with c_mode_badge:
+        if qa_use_ai:
+            st.caption(f"Trạng thái: 🤖 **AI Mode ({engine_mode.upper()})**")
+        else:
+            st.caption("Trạng thái: ⚡ **Offline V2 (Zero-LLM Cục bộ)**")
+
+    c_b1, c_b2 = st.columns(2)
+    btn_ai_qa = c_b1.button("🤖 Tìm kiếm & Trả lời với AI", type="primary" if qa_use_ai else "secondary", use_container_width=True)
+    btn_fast_qa = c_b2.button("⚡ Tìm kiếm & Trả lời Nhanh (Offline)", type="secondary" if qa_use_ai else "primary", use_container_width=True)
+
+    do_qa = False
+    qa_search_ai = qa_use_ai
+    if btn_ai_qa:
+        do_qa = True
+        qa_search_ai = True
+    elif btn_fast_qa:
+        do_qa = True
+        qa_search_ai = False
+
+    if do_qa and qa_text.strip():
         with st.spinner("Đang tìm kiếm bằng chứng và chuẩn hóa đáp án..."):
+            curr_active_mode = engine_mode if qa_search_ai else "offline"
             results, trans_q, intent = engine.search(
                 qa_text.strip(),
                 top_k=top_k,
                 video_filter=v_filter,
                 auto_translate=auto_translate,
-                engine_mode=engine_mode,
-                use_ai_query=(engine_mode in ["meta", "hybrid", "ai"]),
+                engine_mode=curr_active_mode,
+                use_ai_query=qa_search_ai,
                 use_asr=use_asr,
                 audio_weight=audio_weight,
                 asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
@@ -241,6 +407,7 @@ elif query_mode == "Visual QA":
             st.session_state["qa_results"] = results
             st.session_state["qa_text"] = qa_text.strip()
             st.session_state["qa_sub_name"] = default_sub_name
+            st.session_state["qa_used_ai"] = qa_search_ai
 
     if "qa_results" in st.session_state and st.session_state["qa_results"]:
         results = st.session_state["qa_results"]
@@ -295,7 +462,29 @@ elif query_mode == "TRAKE":
 
     trake_text = st.text_area("Danh sách sự kiện (E1, E2, ...):", value=default_query, height=150)
 
-    if st.button("🚀 Bắt đầu Định vị Sự kiện", type="primary", use_container_width=True) and trake_text.strip():
+    c_toggle, c_mode_badge = st.columns([2, 2])
+    with c_toggle:
+        trake_use_ai = st.toggle("🤖 Bật AI Mode cho chuỗi sự kiện", value=enable_ai_mode, key="trake_use_ai_toggle")
+    with c_mode_badge:
+        if trake_use_ai:
+            st.caption(f"Trạng thái: 🤖 **AI Mode ({engine_mode.upper()})**")
+        else:
+            st.caption("Trạng thái: ⚡ **Offline V2 (Zero-LLM Cục bộ)**")
+
+    c_b1, c_b2 = st.columns(2)
+    btn_ai_trake = c_b1.button("🤖 Định vị Sự kiện với AI", type="primary" if trake_use_ai else "secondary", use_container_width=True)
+    btn_fast_trake = c_b2.button("⚡ Định vị Nhanh (Offline)", type="secondary" if trake_use_ai else "primary", use_container_width=True)
+
+    do_trake = False
+    trake_search_ai = trake_use_ai
+    if btn_ai_trake:
+        do_trake = True
+        trake_search_ai = True
+    elif btn_fast_trake:
+        do_trake = True
+        trake_search_ai = False
+
+    if do_trake and trake_text.strip():
         lines = [l.strip() for l in trake_text.split("\n") if l.strip()]
         event_queries = [
             re.sub(r"^E\d+[:.]\s*", "", l, flags=re.IGNORECASE)
@@ -310,7 +499,7 @@ elif query_mode == "TRAKE":
                 top_k_videos=10,
                 video_filter=v_filter,
                 auto_translate=auto_translate,
-                use_ai_query=(engine_mode in ["meta", "hybrid", "ai"])
+                use_ai_query=trake_search_ai
             )
             st.session_state["trake_results"] = trake_res
             st.session_state["trake_sub_name"] = default_sub_name
@@ -354,6 +543,10 @@ elif query_mode == "Batch Processing":
 
     batch_dir = st.text_input("Thư mục đề thi:", value="de-thi" if os.path.exists("de-thi") else "THUNGHIEM-bo-de-thi")
 
+    batch_use_ai = st.toggle("🤖 Kích hoạt AI Semantic Mode cho toàn bộ Batch", value=enable_ai_mode)
+    curr_batch_mode = engine_mode if batch_use_ai else "offline"
+    st.caption(f"Cấu hình Batch hiện tại: **{'🤖 AI Mode (' + curr_batch_mode.upper() + ')' if batch_use_ai else '⚡ Offline Zero-LLM'}**")
+
     if st.button("🚀 Chạy Batch toàn bộ", type="primary", use_container_width=True):
         if not os.path.exists(batch_dir):
             st.error(f"Thư mục không tồn tại: {batch_dir}")
@@ -370,8 +563,8 @@ elif query_mode == "Batch Processing":
                 process_query_file(
                     qf, engine, exporter,
                     top_k=top_k,
-                    engine_mode=engine_mode,
-                    use_ai_query=(engine_mode in ["meta", "hybrid", "ai"]),
+                    engine_mode=curr_batch_mode,
+                    use_ai_query=batch_use_ai,
                     use_asr=use_asr,
                     audio_weight=audio_weight
                 )

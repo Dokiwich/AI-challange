@@ -26,7 +26,7 @@ class BaseVisualRetriever(ABC):
 class CLIPVisualRetriever(BaseVisualRetriever):
     """Hiện thực hóa bằng mô hình OpenAI CLIP ViT-B/32 chuẩn công nghiệp"""
     
-    def __init__(self, model_name: str = "ViT-B/32", device: Optional[str] = None):
+    def __init__(self, model_name: str = "ViT-L/14", device: Optional[str] = None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"[CLIPVisualRetriever] Loading {model_name} on {self.device}...")
         self.model, self.preprocess = clip.load(model_name, device=self.device)
@@ -73,5 +73,7 @@ class CLIPVisualRetriever(BaseVisualRetriever):
     def compute_similarity(self, text_features: torch.Tensor, image_features: torch.Tensor) -> np.ndarray:
         """Tính toán tích vô hướng (Cosine Similarity) trên GPU/CPU"""
         with torch.no_grad():
+            # Đồng bộ kiểu dữ liệu (tránh lỗi float16 vs float32 khi dùng model to như ViT-L/14)
+            text_features = text_features.to(image_features.dtype)
             sims = (text_features @ image_features.T).cpu().numpy()
         return sims

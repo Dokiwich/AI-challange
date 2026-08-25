@@ -17,6 +17,25 @@ import numpy as np
 from typing import List, Dict, Any, Tuple
 from core.retrieval_engine import RetrievalEngine
 
+def detect_duplicate_groups(queries: List[Dict[str, Any]]) -> List[List[Dict[str, Any]]]:
+    """Diagnostic Benchmark: Phát hiện các câu hỏi trùng lặp ngữ nghĩa (p1-8, p1-14)"""
+    groups = []
+    seen = set()
+    for i, q1 in enumerate(queries):
+        if i in seen: continue
+        group = [q1]
+        seen.add(i)
+        w1 = set(q1["query_text"].lower().split())
+        for j, q2 in enumerate(queries[i+1:], start=i+1):
+            if j in seen: continue
+            w2 = set(q2["query_text"].lower().split())
+            if len(w1.intersection(w2)) / max(len(w1), 1) > 0.85:
+                group.append(q2)
+                seen.add(j)
+        if len(group) > 1:
+            groups.append(group)
+    return groups
+
 def load_competition_queries(de_thi_dir: str = "de-thi") -> List[Dict[str, Any]]:
     """Tải toàn bộ bộ đề thi AIC từ thư mục de-thi/"""
     queries = []
@@ -87,7 +106,7 @@ def run_track_evaluation(
         else:
             use_ai = track_mode in ["ai", "hybrid", "meta"]
             results, q_en, intent_flags = engine.search(
-                query_text=q_text,
+                raw_query=q_text,
                 top_k=top_k,
                 engine_mode=track_mode,
                 use_ai_query=use_ai,
@@ -126,6 +145,15 @@ def run_track_evaluation(
     print(f"   • Avg Constraint Satisfaction Rate (CSR): {avg_csr:.3f}")
     print(f"   • TIER_0 High Confidence Rate: {tier0_rate * 100:.1f}%")
     print(f"   • Tier Breakdown: {tier_counts}")
+    print(f"   • NOTE: Final Score (R@1 + R@5 + R@20 + R@50 + R@100)/5 will be evaluated on submission server.")
+
+    # Diagnostic Benchmark
+    dup_groups = detect_duplicate_groups(queries)
+    if dup_groups:
+        print(f"\n   🚨 [Diagnostic] Found {len(dup_groups)} duplicate query groups!")
+        for idx, grp in enumerate(dup_groups):
+            names = [g["filename"] for g in grp]
+            print(f"       Group {idx+1}: {', '.join(names)}")
 
     return {
         "track_mode": track_mode,

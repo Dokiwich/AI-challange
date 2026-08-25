@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 def build_dataset(
     features_dir="data/features/clip-features-32-aic25-b1/clip-features-32",
-    media_info_dir="data/media-info-aic25-b1/media-info",
+    media_info_dir="data/mapping/media-info-aic25-b1/media-info",
     output_npy="data/features/clip_features.npy",
     output_map="data/mapping/map_keyframes.json",
     fps=25.0

@@ -1,59 +1,61 @@
 """
-Common Semantic IR (Intermediate Representation)
-Đặc tả cấu trúc dữ liệu trung gian chuẩn hóa dùng chung cho:
-- Track 1: Offline Compiler V2
-- Track 2: AI Semantic Compiler V2
-- Track 3: Hybrid Fusion Engine
-- Track 4: Meta-Router & Policy Engine
+Common Semantic IR V3.2 (Event-Centric Intermediate Representation)
+Đặc tả cấu trúc dữ liệu trung gian chuẩn hóa cho V3.2:
+- Core Events (Hành động sống còn: w_core = 0.8..0.9)
+- Support Facts (Đồ vật nền phụ trợ: w_supp = 0.1..0.2)
+- Event Density (D_event) & Event Importance (I_event)
+- Multi-View Prompt Budget (< 60 tokens)
+- Provenance-Aware Node Tracking
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Tuple, Optional
 
 @dataclass
-class EntityNode:
-    id: str
-    canonical: str
-    attributes: List[str] = field(default_factory=list)
+class CoreEventNode:
+    event_id: str
+    action_verb: str
+    subject: str = "agent"
+    target_object: str = ""
+    recipient_location: str = ""
+    canonical_prompt_en: str = ""
+    importance_weight: float = 0.8  # [0.5, 1.0]
+    is_core: bool = True
+    phase_order: int = 1
+    expected_duration_sec: float = 5.0
+
+@dataclass
+class ConstraintNode:
+    constraint_type: str  # COUNT | ATTRIBUTE | RELATION | SPATIAL
+    target_entity: str
+    condition: str
+    is_hard: bool = True
+
+@dataclass
+class SupportFactNode:
+    fact_id: str
+    fact_type: str = "OBJECT"  # OBJECT | BACKGROUND | ATTRIBUTE | SPATIAL
+    description_en: str = ""
+    weight: float = 0.2  # [0.05, 0.3]
     source_span: Optional[str] = None
-    source_type: str = "explicit"  # "explicit" | "inferred"
-    provenance: Dict[str, Dict[str, Any]] = field(default_factory=lambda: {
-        "offline": {"exists": False, "confidence": 0.0},
-        "ai": {"exists": False, "confidence": 0.0}
-    })
-    hypotheses: List[Dict[str, Any]] = field(default_factory=list)
-
-@dataclass
-class RelationNode:
-    type: str  # TEMPORAL | SIMULTANEOUS | ATTRIBUTE | SPATIAL | CAUSAL | CONDITIONAL | COREFERENCE | UNKNOWN
-    subject: str
-    action: Optional[str] = None
-    relation: Optional[str] = None
-    object: Optional[str] = None
-    priority: str = "HARD_REQUIRED"  # HARD_REQUIRED | SOFT_PREFERRED | OPTIONAL_CONTEXT
-    phase_idx: Optional[int] = None
-    expected_gap: str = "UNKNOWN"  # IMMEDIATE | SHORT | LONG | UNKNOWN
 
 @dataclass
 class AspectPromptNode:
     global_prompt: str = ""
-    scene: Optional[Dict[str, Any]] = None       # {"value": "...", "confidence": 0.8} or None
-    action: Optional[Dict[str, Any]] = None      # {"value": "...", "confidence": 0.9} or None
-    object: Optional[Dict[str, Any]] = None      # {"value": "...", "confidence": 0.85} or None
-    attributes: Optional[Dict[str, Any]] = None  # {"value": "...", "confidence": 0.9} or None
-    relations: Optional[Dict[str, Any]] = None   # {"value": "...", "confidence": 0.7} or None
+    action_prompt: Optional[str] = None
+    object_prompt: Optional[str] = None
+    scene_prompt: Optional[str] = None
 
 @dataclass
 class TemporalPhaseNode:
     phase_idx: int
     canonical_prompt: str
-    hypotheses: List[Dict[str, Any]] = field(default_factory=list) # [{"prompt": "...", "prior_weight": 0.8}]
-    scene: Optional[str] = None
+    hypotheses: List[Dict[str, Any]] = field(default_factory=list)
     action: Optional[str] = None
     object: Optional[str] = None
-    attributes: Optional[str] = None
-    relations: Optional[str] = None
-    semantic_importance: float = 0.5  # [0.0, 1.0]
+    scene: Optional[str] = None
+    semantic_importance: float = 0.5  # [0.1, 1.0]
+    is_core_event: bool = True
 
 @dataclass
 class CommonSemanticIR:
@@ -69,17 +71,17 @@ class CommonSemanticIR:
         "calibrated_ai": 0.5
     })
     is_sequence: bool = False
-    entities: List[EntityNode] = field(default_factory=list)
-    relations: List[RelationNode] = field(default_factory=list)
+    event_density: float = 0.0  # D_event
+    core_events: List[CoreEventNode] = field(default_factory=list)
+    support_facts: List[SupportFactNode] = field(default_factory=list)
     aspects: AspectPromptNode = field(default_factory=AspectPromptNode)
     temporal_phases: List[TemporalPhaseNode] = field(default_factory=list)
-    hard_anchors: List[Dict[str, Any]] = field(default_factory=list) # [{"text": "BUS-01", "fuzzy": True, "min_sim": 0.8}]
+    hard_anchors: List[Dict[str, Any]] = field(default_factory=list)
     speech_keywords: List[str] = field(default_factory=list)
-    qa_target: Optional[str] = None
-    qa_expected_type: Optional[str] = None  # entity | number | color | yes_no
+    constraints: List[ConstraintNode] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Chuyển đổi thành Dictionary chuẩn để serialize hoặc hiển thị giao diện"""
+        """Serialize thành Dictionary chuẩn"""
         return {
             "query_id": self.query_id,
             "task_type": self.task_type,
@@ -88,55 +90,49 @@ class CommonSemanticIR:
             "compiler_source": self.compiler_source,
             "compiler_confidence": self.compiler_confidence,
             "is_sequence": self.is_sequence,
-            "entities": [
+            "event_density": self.event_density,
+            "core_events": [
                 {
-                    "id": e.id,
-                    "canonical": e.canonical,
-                    "attributes": e.attributes,
-                    "source_span": e.source_span,
-                    "source_type": e.source_type,
-                    "provenance": e.provenance,
-                    "hypotheses": e.hypotheses
+                    "event_id": e.event_id,
+                    "action_verb": e.action_verb,
+                    "target_object": e.target_object,
+                    "recipient_location": e.recipient_location,
+                    "canonical_prompt_en": e.canonical_prompt_en,
+                    "importance_weight": e.importance_weight,
+                    "is_core": e.is_core,
+                    "phase_order": e.phase_order
                 }
-                for e in self.entities
+                for e in self.core_events
             ],
-            "relations": [
+            "support_facts": [
                 {
-                    "type": r.type,
-                    "subject": r.subject,
-                    "action": r.action,
-                    "relation": r.relation,
-                    "object": r.object,
-                    "priority": r.priority,
-                    "phase_idx": r.phase_idx,
-                    "expected_gap": r.expected_gap
+                    "fact_id": f.fact_id,
+                    "fact_type": f.fact_type,
+                    "description_en": f.description_en,
+                    "weight": f.weight
                 }
-                for r in self.relations
+                for f in self.support_facts
             ],
-            "aspects": {
-                "global": self.aspects.global_prompt,
-                "scene": self.aspects.scene,
-                "action": self.aspects.action,
-                "object": self.aspects.object,
-                "attributes": self.aspects.attributes,
-                "relations": self.aspects.relations
-            },
             "temporal_phases": [
                 {
                     "phase_idx": p.phase_idx,
                     "canonical_prompt": p.canonical_prompt,
-                    "hypotheses": p.hypotheses,
-                    "scene": p.scene,
                     "action": p.action,
                     "object": p.object,
-                    "attributes": p.attributes,
-                    "relations": p.relations,
-                    "semantic_importance": p.semantic_importance
+                    "semantic_importance": p.semantic_importance,
+                    "is_core_event": p.is_core_event
                 }
                 for p in self.temporal_phases
             ],
             "hard_anchors": self.hard_anchors,
             "speech_keywords": self.speech_keywords,
-            "qa_target": self.qa_target,
-            "qa_expected_type": self.qa_expected_type
+            "constraints": [
+                {
+                    "constraint_type": c.constraint_type,
+                    "target_entity": c.target_entity,
+                    "condition": c.condition,
+                    "is_hard": c.is_hard
+                }
+                for c in self.constraints
+            ]
         }

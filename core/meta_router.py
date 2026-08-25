@@ -14,11 +14,11 @@ from dataclasses import dataclass, field
 @dataclass
 class MetaFeatureVector:
     query_length: int = 0
-    num_entities: int = 0
     is_sequence: bool = False
     has_hard_ocr: bool = False
     has_speech_query: bool = False
     semantic_ambiguity: float = 0.0  # Entropy of alternative hypotheses
+    constraint_density: float = 0.0  # Number of attributes/counts per phase
     
     # Feature kết quả từ các Track nếu đã chạy sơ bộ
     offline_conf: float = 0.0
@@ -46,40 +46,64 @@ class MetaRouter:
         self.entropy_threshold_safe = entropy_threshold_safe
         self.agreement_threshold_high = agreement_threshold_high
 
-    def extract_meta_features_query(self, query_ir: Any) -> MetaFeatureVector:
-        """Trích xuất đặc trưng siêu cấp ban đầu từ câu truy vấn (Pre-Retrieval Features)"""
+    def extract_meta_features(self, query: Any) -> MetaFeatureVector:
+        """Trích xuất đặc trưng siêu cấp ban đầu từ câu truy vấn (Hỗ trợ cả str và Semantic IR)"""
         feat = MetaFeatureVector()
-        if hasattr(query_ir, "raw_query"):
-            feat.query_length = len(query_ir.raw_query.split())
-            feat.is_sequence = query_ir.is_sequence
-            feat.num_entities = len(getattr(query_ir, "entities", []))
-            feat.has_hard_ocr = len(getattr(query_ir, "hard_anchors", [])) > 0
-            feat.has_speech_query = len(getattr(query_ir, "speech_keywords", [])) > 0
+        if isinstance(query, str):
+            feat.query_length = len(query.split())
+            feat.has_hard_ocr = bool('"' in query or '“' in query or any(ch.isdigit() for ch in query))
+            feat.is_sequence = any(w in query.lower() for w in ['sau đó', 'tiếp theo', 'bước', 'bắt đầu', 'rồi'])
+            return feat
+
+        if hasattr(query, "raw_query"):
+            feat.query_length = len(query.raw_query.split())
             
-            # Tính Semantic Ambiguity dựa trên số lượng giả thuyết
-            all_hypos = sum([len(p.hypotheses) for p in getattr(query_ir, "temporal_phases", [])])
+            # Nhận diện hidden sequence: có nhiều dấu phẩy/chấm liệt kê các pha
+            hidden_seq = False
+            splits = [s for s in query.raw_query.replace(".", ",").split(",") if len(s.strip()) > 5]
+            if len(splits) > 2 and query.event_density > 1.2:
+                hidden_seq = True
+                
+            feat.is_sequence = query.is_sequence or hidden_seq
+            feat.has_hard_ocr = len(getattr(query, "hard_anchors", [])) > 0
+            feat.has_speech_query = len(getattr(query, "speech_keywords", [])) > 0
+            
+            constraints = getattr(query, "constraints", [])
+            num_phases = max(1, len(getattr(query, "temporal_phases", [])))
+            feat.constraint_density = float(len(constraints)) / float(num_phases)
+            
+            all_hypos = sum([len(p.hypotheses) for p in getattr(query, "temporal_phases", [])])
             feat.semantic_ambiguity = min(1.0, float(all_hypos / 6.0)) if all_hypos > 0 else 0.0
+            
+            # Tăng ambiguity nếu có đếm số lượng phức tạp
+            if feat.constraint_density >= 1.0:
+                feat.semantic_ambiguity = min(1.0, feat.semantic_ambiguity + 0.3)
+                
         return feat
 
-    def route_winner(self, feat: MetaFeatureVector) -> str:
+    def extract_meta_features_query(self, query_ir: Any) -> MetaFeatureVector:
+        return self.extract_meta_features(query_ir)
+
+    def route_winner(self, feat: MetaFeatureVector) -> Tuple[str, float]:
         """
         Mode A: Dynamic Winner Routing
-        - Trả về 'offline' (Track 1), 'ai' (Track 2), hoặc 'hybrid' (Track 3)
+        - Trả về (track_name, routing_confidence)
         """
         # 1. Nếu có mỏ neo cứng OCR / từ khóa cụ thể hoặc câu cực ngắn đơn giản -> Track 1
-        if feat.has_hard_ocr and not feat.is_sequence and feat.query_length <= 8:
-            return "offline"
+        # Nhưng NẾU constraint_density cao thì phải đi AI để gỡ rối
+        if feat.has_hard_ocr and not feat.is_sequence and feat.query_length <= 8 and feat.constraint_density < 0.5:
+            return "offline", 0.92
 
-        # 2. Nếu là câu đơn nhưng từ ngữ trừu tượng/mơ hồ cao -> Track 2
-        if feat.semantic_ambiguity >= 0.5 and not feat.is_sequence:
-            return "ai"
+        # 2. Nếu là câu đơn nhưng từ ngữ trừu tượng/mơ hồ cao hoặc nhiều constraint (đếm, thuộc tính) -> Track 2
+        if (feat.semantic_ambiguity >= 0.5 or feat.constraint_density >= 1.0) and not feat.is_sequence:
+            return "ai", 0.88
 
         # 3. Nếu là chuỗi hành động đa pha phức tạp -> Track 3 (Hybrid)
-        if feat.is_sequence or feat.num_entities >= 3:
-            return "hybrid"
+        if feat.is_sequence:
+            return "hybrid", 0.95
 
         # Mặc định: Track 3 Hybrid
-        return "hybrid"
+        return "hybrid", 0.85
 
     def evaluate_escalation(
         self,

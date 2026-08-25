@@ -1,22 +1,21 @@
 """
-RetrievalEngine V3.0 (AIC 2026 Tournament-Grade 4-Track Engine)
+RetrievalEngine V3.3 (Precision Natural Evidence Retrieval Engine)
 Tích hợp:
-1. BaseVisualRetriever & CLIP Visual Interface
-2. Track 1 (Offline V2), Track 2 (AI Semantic V2), Track 3 (Hybrid Fusion), Track 4 (Meta-Policy / Winner Selection / Escalation)
-3. 4-Stage Hierarchical Precision Verification
-4. Decoupled Composite Weighted DP
-5. Constraint Graph Evidence Judge
-6. AIC Task Handlers: KIS, Visual QA Normalizer, TRAKE 3-Stage Localizer
+1. Direct Continuous Cosine Similarity làm xương sống (Giữ nguyên vẹn 100% độ nhạy khoảng cách)
+2. Multi-Aspect & Multi-Phase Fusion cân bằng (70% Full Holistic Context + 15% Aspects + 15% Sequence DP)
+3. Frame-Level Union-of-Phases Candidate Generation (Tối đa hóa Recall)
+4. Skip-Aware Monotonic DP with Adaptive Windows
+5. Evidence Judge V3.3 (10D Evidence Vector + 3-Level Veto + Strict CEC Certification)
 """
 
 import os
-import glob
-import json
 import re
-import time
+import json
+import logging
+from typing import Dict, List, Any, Tuple, Optional, Set
 import numpy as np
 import torch
-from typing import List, Dict, Any, Tuple, Optional, Set, Union
+from PIL import Image
 
 from core.base_retriever import CLIPVisualRetriever
 from core.query_compiler import QueryCompiler
@@ -26,16 +25,23 @@ from core.meta_router import MetaRouter, MetaFeatureVector
 from core.task_handlers import QAnswerNormalizer, TRAKE3StageLocalizer
 from core.semantic_ir import CommonSemanticIR
 
+logger = logging.getLogger(__name__)
 
 class RetrievalEngine:
+    """
+    RetrievalEngine V3.3:
+    Bộ điều phối hợp nhất 4 Track với độ chính xác cao dựa trên Cosine Similarity liên tục và Evidence Judge.
+    """
     def __init__(
         self,
         features_path: str = "data/features/clip_features.npy",
         map_path: str = "data/mapping/map_keyframes.json",
-        model_name: str = "ViT-B/32",
+        ocr_path: str = "data/ocr/ocr_results.json",
+        asr_cache_path: str = "data/cache/asr_bm25_cache.pkl",
+        model_name: str = "ViT-L/14",
         device: Optional[str] = None
     ):
-        self.device = device if device else ("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"[RetrievalEngine] Device: {self.device}")
 
         # Khởi tạo các Sub-Engines
@@ -57,222 +63,173 @@ class RetrievalEngine:
 
         if not os.path.exists(map_path):
             raise FileNotFoundError(f"Not found: {map_path}")
-        with open(map_path, "r", encoding="utf-8") as f:
-            self.keyframe_map = json.load(f)
+        with open(map_path, 'r', encoding='utf-8') as f:
+            self.keyframe_map: List[Dict[str, Any]] = json.load(f)
         print(f"[RetrievalEngine] {len(self.keyframe_map)} keyframe records")
 
+        # Lập chỉ mục video -> keyframe indices
         self.video_to_indices: Dict[str, List[int]] = {}
         for idx, item in enumerate(self.keyframe_map):
             vname = item.get("video") or item.get("video_name")
             if vname:
-                if vname not in self.video_to_indices:
-                    self.video_to_indices[vname] = []
-                self.video_to_indices[vname].append(idx)
+                self.video_to_indices.setdefault(vname, []).append(idx)
 
-        self.video_to_dir = self._scan_video_directories()
+        # Quét đệ quy toàn bộ thư mục video keyframes trên đĩa
+        self.video_directories: Dict[str, str] = {}
+        self._scan_video_directories()
+        print(f"[RetrievalEngine] Indexed {len(self.video_directories)} video keyframe folders on disk.")
 
+        # Lập chỉ mục OCR
+        self.keyframe_texts: List[str] = [""] * len(self.keyframe_map)
+        if os.path.exists(ocr_path):
+            with open(ocr_path, 'r', encoding='utf-8') as f:
+                ocr_data = json.load(f)
+            for idx, item in enumerate(self.keyframe_map):
+                v = item.get("video") or item.get("video_name")
+                f_idx = item.get("keyframe_idx") or item.get("frame")
+                key = f"{v}_{f_idx}"
+                if key in ocr_data:
+                    self.keyframe_texts[idx] = ocr_data[key].get("text", "")
+
+        # Nạp Cache ASR BM25
         self.has_bm25 = False
-        self._load_transcripts()
-        self._initialized = True
-
-    # ======================================================================
-    # Data loading & Image resolution
-    # ======================================================================
-
-    def _load_transcripts(self, transcript_dir="data/transcripts", fps=25):
-        import pickle
-        cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "cache")
-        cache_file = os.path.join(cache_dir, "asr_bm25_cache.pkl")
-        
-        if os.path.exists(cache_file):
+        self.bm25 = None
+        self.asr_texts = None
+        if os.path.exists(asr_cache_path):
             try:
-                print(f"[RetrievalEngine] Loading cached ASR index from '{cache_file}'...")
-                with open(cache_file, "rb") as f:
-                    cached_data = pickle.load(f)
-                self.keyframe_texts = cached_data["keyframe_texts"]
-                self.bm25 = cached_data["bm25"]
-                self.has_bm25 = True
-                print("[RetrievalEngine] ✅ Cached BM25 index loaded instantly.")
-                return
+                import pickle
+                print(f"[RetrievalEngine] Loading cached ASR index from '{asr_cache_path}'...")
+                with open(asr_cache_path, 'rb') as f:
+                    cache_obj = pickle.load(f)
+                if isinstance(cache_obj, dict):
+                    self.bm25 = cache_obj.get("bm25")
+                    self.asr_texts = cache_obj.get("keyframe_texts")
+                else:
+                    self.bm25 = cache_obj
+                self.has_bm25 = (self.bm25 is not None and hasattr(self.bm25, "get_scores"))
+                if self.has_bm25:
+                    print("[RetrievalEngine] ✅ Cached BM25 index loaded instantly.")
+                else:
+                    print("[RetrievalEngine] ⚠️ Cached ASR object does not contain a valid BM25 index.")
             except Exception as e:
-                print(f"[RetrievalEngine] Cache read error: {e}, rebuilding...")
+                print(f"[RetrievalEngine] ⚠️ Failed loading ASR cache: {e}")
 
-        self.keyframe_texts = ["" for _ in range(len(self.keyframe_map))]
-        if not os.path.exists(transcript_dir):
-            return
-        print(f"[RetrievalEngine] Loading ASR transcripts from {transcript_dir}...")
-        for json_path in glob.glob(os.path.join(transcript_dir, "*.json")):
-            vname = os.path.splitext(os.path.basename(json_path))[0]
-            v_indices = self.video_to_indices.get(vname)
-            if not v_indices:
-                continue
-            try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                segments = data if isinstance(data, list) else data.get("segments", [])
-                for seg in segments:
-                    text = seg.get("text", "").strip()
-                    if not text:
-                        continue
-                    start_s = float(seg.get("start", 0))
-                    end_s = float(seg.get("end", start_s))
-                    mid_s = (start_s + end_s) / 2.0
-                    
-                    best_idx = None
-                    best_diff = 999999
-                    for idx in v_indices:
-                        pts = self.keyframe_map[idx].get("pts_time")
-                        if pts is not None:
-                            diff = abs(float(pts) - mid_s)
-                        else:
-                            frame = int(self.keyframe_map[idx].get("frame", 0))
-                            diff = abs((frame / float(fps)) - mid_s)
-                        if diff < best_diff:
-                            best_diff = diff
-                            best_idx = idx
-                            
-                    if best_idx is not None and best_diff <= 15.0:
-                        if self.keyframe_texts[best_idx]:
-                            self.keyframe_texts[best_idx] += " " + text
-                        else:
-                            self.keyframe_texts[best_idx] = text
-            except Exception as e:
-                pass
-
-        try:
-            from rank_bm25 import BM25Okapi
-            corpus_tokens = [t.lower().split() if t else [] for t in self.keyframe_texts]
-            self.bm25 = BM25Okapi(corpus_tokens)
-            self.has_bm25 = True
-            
-            os.makedirs(cache_dir, exist_ok=True)
-            with open(cache_file, "wb") as f:
-                pickle.dump({"keyframe_texts": self.keyframe_texts, "bm25": self.bm25}, f)
-            print(f"[RetrievalEngine] ✅ ASR BM25 index built and cached.")
-        except Exception as e:
-            print(f"[RetrievalEngine] BM25 indexing error: {e}")
-
-    def _scan_video_directories(self) -> Dict[str, str]:
-        """Quét và lập chỉ mục toàn bộ thư mục video keyframes trên đĩa"""
-        video_to_dir = {}
-        search_roots = [
-            ".",
-            "data",
-            "data/keyframes",
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "keyframes")
-        ]
+    def _scan_video_directories(self):
+        """Quét đệ quy toàn bộ thư mục chứa keyframes"""
+        search_roots = [".", "data", "data/keyframes"]
         for s_root in search_roots:
-            if os.path.exists(s_root):
-                for root, dirs, _ in os.walk(s_root):
-                    for d in dirs:
-                        if (d.startswith("L") and "_" in d) or d.startswith("V") or d.startswith("video_"):
-                            if d not in video_to_dir:
-                                video_to_dir[d] = os.path.abspath(os.path.join(root, d))
-        print(f"[RetrievalEngine] Indexed {len(video_to_dir)} video keyframe folders on disk.")
-        return video_to_dir
+            if not os.path.exists(s_root):
+                continue
+            for root, dirs, _ in os.walk(s_root):
+                for d in dirs:
+                    if re.match(r'^L\d+_V\d+$', d, re.IGNORECASE):
+                        full_d_path = os.path.abspath(os.path.join(root, d))
+                        self.video_directories[d] = full_d_path
 
-    def get_image_path(self, video_name: str, keyframe_idx: int, frame_idx: Optional[int] = None) -> Optional[str]:
-        """Tìm đường dẫn ảnh thực tế trên đĩa cho khung hình"""
-        video_dir = self.video_to_dir.get(video_name)
-        if not video_dir or not os.path.exists(video_dir):
+    def get_extracted_videos(self) -> Set[str]:
+        return set(self.video_directories.keys())
+
+    def get_image_path(self, video_name: str, keyframe_idx: int, frame_idx: int = None) -> Optional[str]:
+        """Định vị file ảnh keyframe thực tế trên đĩa"""
+        if not video_name:
+            return None
+        v_dir = self.video_directories.get(video_name)
+        if not v_dir or not os.path.exists(v_dir):
             return None
 
         candidates = []
-        for fid in ([frame_idx, keyframe_idx] if frame_idx is not None else [keyframe_idx]):
-            if fid is None:
-                continue
+        if keyframe_idx is not None:
             candidates.extend([
-                f"{fid:03d}.jpg", f"{fid:04d}.jpg", f"{fid:05d}.jpg", f"{fid:06d}.jpg", f"{fid}.jpg",
-                f"{fid:03d}.png", f"{fid:04d}.png", f"{fid:05d}.png", f"{fid:06d}.png", f"{fid}.png",
-                f"{fid:03d}.jpeg", f"{fid:04d}.jpeg", f"{fid:05d}.jpeg", f"{fid:06d}.jpeg", f"{fid}.jpeg"
+                f"{int(keyframe_idx):03d}.jpg",
+                f"{int(keyframe_idx):04d}.jpg",
+                f"{int(keyframe_idx):05d}.jpg",
+                f"{int(keyframe_idx)}.jpg",
+                f"{int(keyframe_idx):03d}.png",
+                f"{int(keyframe_idx)}.png"
+            ])
+        if frame_idx is not None and frame_idx != keyframe_idx:
+            candidates.extend([
+                f"{int(frame_idx):03d}.jpg",
+                f"{int(frame_idx):04d}.jpg",
+                f"{int(frame_idx):05d}.jpg",
+                f"{int(frame_idx)}.jpg",
+                f"{int(frame_idx):03d}.png",
+                f"{int(frame_idx)}.png"
             ])
 
         for fname in candidates:
-            p = os.path.join(video_dir, fname)
+            p = os.path.join(v_dir, fname)
             if os.path.exists(p):
                 return p
+
+        try:
+            files = os.listdir(v_dir)
+            if files:
+                target_nums = {str(keyframe_idx)}
+                if frame_idx is not None:
+                    target_nums.add(str(frame_idx))
+                for f in files:
+                    f_base = os.path.splitext(f)[0]
+                    f_num = f_base.lstrip('0') or '0'
+                    if f_num in target_nums or f_base in target_nums:
+                        return os.path.join(v_dir, f)
+                return os.path.join(v_dir, files[0])
+        except Exception:
+            pass
         return None
 
-    def get_extracted_videos(self) -> Set[str]:
-        """Lấy danh sách các video đã có thư mục ảnh keyframes trên đĩa"""
-        return set(self.video_to_dir.keys())
-
-    # ======================================================================
-    # Visual RRF & Similarity Utilities
-    # ======================================================================
-
-    def _compute_rrf_visual(self, prompt_list: List[str], top_per: int = 2500, k_rrf: int = 60) -> np.ndarray:
-        N = self.image_features.shape[0]
-        if not prompt_list:
-            return np.zeros(N, dtype=np.float32)
-
-        prompt_weights = [1.0] * len(prompt_list)
-        feats = self.visual_retriever.encode_text(prompt_list)
-        sim_matrix = self.visual_retriever.compute_similarity(feats, self.image_features)  # (M, N)
-        
-        rrf_scores = np.zeros(N, dtype=np.float32)
-        M = sim_matrix.shape[0]
-
-        for p_idx in range(M):
-            p_weight = prompt_weights[p_idx]
-            scores = sim_matrix[p_idx]
-            top_k_idx = np.argpartition(scores, -top_per)[-top_per:]
-            sorted_idx = top_k_idx[np.argsort(scores[top_k_idx])[::-1]]
-
-            ranks = np.arange(1, top_per + 1)
-            rrf_scores[sorted_idx] += p_weight * (1.0 / (k_rrf + ranks))
-
-        return rrf_scores
-
-    def _min_max_norm(self, scores: np.ndarray) -> np.ndarray:
-        if len(scores) == 0:
-            return scores
-        min_v, max_v = float(scores.min()), float(scores.max())
+    def _min_max_norm(self, arr: np.ndarray) -> np.ndarray:
+        if len(arr) == 0:
+            return arr
+        min_v = float(arr.min())
+        max_v = float(arr.max())
         if max_v > min_v:
-            return (scores - min_v) / (max_v - min_v)
-        return np.zeros_like(scores)
+            return (arr - min_v) / (max_v - min_v)
+        return np.zeros_like(arr)
 
-    # ======================================================================
-    # CORE SEARCH PIPELINE (Tracks 1, 2, 3, 4)
-    # ======================================================================
+    # =========================================================================
+    # CORE SEARCH ENGINE V3.3 (Precision Natural Cosine Backbone)
+    # =========================================================================
 
     def search(
         self,
-        query_text: str,
+        raw_query: str,
         top_k: int = 100,
-        video_filter: Optional[List[str] | str] = None,
+        audio_weight: float = 0.0,
+        video_filter: Optional[List[str]] = None,
         auto_translate: bool = True,
-        engine_mode: str = "meta",   # "offline" (T1) | "ai" (T2) | "hybrid" (T3) | "meta" (T4)
-        use_ai_query: bool = True,
+        use_ai_query: bool = False,
         use_asr: bool = False,
-        audio_weight: float = 0.3,
-        asr_keywords: Optional[List[str] | str] = None,
+        asr_keywords: Optional[str] = None,
+        engine_mode: str = "hybrid",
         diversity_top_2: bool = False
     ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
         """
-        Universal Search Engine:
-        Thực thi linh hoạt theo 4 Track độc lập hoặc điều phối thông minh qua Meta-Router.
+        Tìm kiếm hợp nhất 4 Track chuẩn V3.3 với Direct Cosine Similarity và Evidence Judge.
         """
-        raw_query = query_text.strip()
         N = self.image_features.shape[0]
+        if not raw_query.strip():
+            return [], "", {}
 
-        # 1. Khởi tạo và Phân tích câu hỏi
-        offline_compiled = self.compiler.compile_offline_v2(raw_query, auto_translate=auto_translate)
-        meta_feat = self.meta_router.extract_meta_features_query(offline_compiled)
+        # 1. Trích xuất đặc trưng meta
+        feat_vec = self.meta_router.extract_meta_features(raw_query)
 
-        # 2. Xử lý Chế độ Track 4 (Meta-Policy / Winner Selection / Escalation)
-        active_track = engine_mode
-        if engine_mode == "meta":
-            # Mode A: Winner Routing
-            active_track = self.meta_router.route_winner(meta_feat)
-            print(f"[MetaRouter] Routing query to: Track {active_track.upper()}")
+        # 2. Định tuyến Track
+        if not use_ai_query or engine_mode == "offline":
+            active_track = "offline"
+        elif engine_mode == "meta":
+            active_track, routing_confidence = self.meta_router.route_winner(feat_vec)
+        elif engine_mode == "ai":
+            active_track = "ai"
+        else:
+            active_track = "hybrid"
 
-        # 3. Biên dịch câu truy vấn theo Track được chọn
+        # 3. Biên dịch câu truy vấn
         if active_track == "offline":
-            compiled_dict = self.compiler.compile_query(raw_query, auto_translate=auto_translate, engine_mode="offline")
+            compiled_dict = self.compiler.compile_query(raw_query, auto_translate=auto_translate, use_ai_query=False, engine_mode="offline")
         elif active_track == "ai":
             compiled_dict = self.compiler.compile_query(raw_query, auto_translate=auto_translate, use_ai_query=True, engine_mode="ai")
-        else: # "hybrid"
+        else:
             compiled_dict = self.compiler.compile_query(raw_query, auto_translate=auto_translate, use_ai_query=True, engine_mode="hybrid")
 
         query_en = compiled_dict["query_en"]
@@ -290,63 +247,86 @@ class RetrievalEngine:
             intent_flags["has_speech"] = False
         intent_flags["effective_audio_weight"] = effective_audio_weight
 
-        # 5. Visual Scoring (Single-Span RRF vs Multi-Phase Temporal DP)
-        is_multi_phase = len(phases_en) > 1 and intent_flags.get("is_sequence")
+        # 5. Direct Cosine Visual Scoring (Trục chính xác số 1)
+        global_text = aspect_prompts.get("global", query_en)
+        global_feat = self.visual_retriever.encode_text([global_text])
+        global_sim = self.visual_retriever.compute_similarity(global_feat, self.image_features)[0]
+
+        is_multi_phase = len(phases_en) > 1 and intent_flags.get("is_sequence", False)
         seq_bonus = np.zeros(N, dtype=np.float32)
+        cec_scores = np.zeros(N, dtype=np.float32)
 
         if is_multi_phase:
-            print(f"[Search] Multi-phase mode: {len(phases_en)} phases ({active_track.upper()})")
-            phase_sims_raw = []
-            sem_importances = []
-            
-            for i, p in enumerate(phases_en):
-                # Tạo aspect prompts hoặc hypotheses cho pha
-                p_prompts = [p]
-                if isinstance(sem_ir, CommonSemanticIR) and i < len(sem_ir.temporal_phases):
-                    p_node = sem_ir.temporal_phases[i]
-                    p_prompts = [h["prompt"] for h in p_node.hypotheses] or [p]
-                    sem_importances.append(p_node.semantic_importance)
-                else:
-                    sem_importances.append(0.5)
+            print(f"[Search] Multi-phase Event Mode: {len(phases_en)} phases ({active_track.upper()})")
+            phase_feats = self.visual_retriever.encode_text(phases_en)
+            phase_sims = self.visual_retriever.compute_similarity(phase_feats, self.image_features)
 
-                rrf = self._compute_rrf_visual(p_prompts, top_per=2500, k_rrf=60)
-                phase_sims_raw.append(rrf)
+            # Lấy Union Candidates từ Top frames của từng pha + Top Global
+            candidate_videos = set()
+            for s_idx in range(len(phases_en)):
+                p_sim = phase_sims[s_idx]
+                top_part = np.argpartition(p_sim, -250)[-250:]
+                for idx in top_part:
+                    v = self.keyframe_map[idx].get("video") or self.keyframe_map[idx].get("video_name")
+                    if v:
+                        candidate_videos.add(v)
 
-            base_visual = np.max(phase_sims_raw, axis=0)
-            S = len(phases_en)
+            top_global_part = np.argpartition(global_sim, -200)[-200:]
+            for idx in top_global_part:
+                v = self.keyframe_map[idx].get("video") or self.keyframe_map[idx].get("video_name")
+                if v:
+                    candidate_videos.add(v)
 
-            # Chạy Decoupled Composite Monotonic DP trên từng video
-            for vname, v_indices in self.video_to_indices.items():
+            if video_filter:
+                vf_set = set([video_filter] if isinstance(video_filter, str) else video_filter)
+                candidate_videos = candidate_videos.intersection(vf_set)
+
+            # Chạy Skip-Aware DP trên Candidate Videos
+            for vname in candidate_videos:
+                v_indices = self.video_to_indices.get(vname, [])
                 T_v = len(v_indices)
-                if T_v < S:
+                if T_v < 2:
                     continue
-                v_score_matrix = np.array([scores[v_indices] for scores in phase_sims_raw])
+
+                v_score_matrix = phase_sims[:, v_indices]
                 v_timestamps = np.array([
                     float(self.keyframe_map[idx]["pts_time"]) if self.keyframe_map[idx].get("pts_time") is not None
                     else float(self.keyframe_map[idx].get("frame", 0))
                     for idx in v_indices
                 ])
-                
+
                 start_at_beg = intent_flags.get("has_start_anchor", False)
-                _, _, frame_bonuses, _ = self.temporal_engine.align_sequence_monotonic_dp(
-                    v_score_matrix, v_timestamps, semantic_importances=sem_importances,
-                    start_at_beginning=start_at_beg, gap_type="SHORT"
+                _, _, frame_bonuses, _, cec_val = self.temporal_engine.align_sequence_monotonic_dp(
+                    v_score_matrix, v_timestamps,
+                    start_at_beginning=start_at_beg,
+                    gap_type="SHORT",
+                    allow_skip=True
                 )
                 for li, gi in enumerate(v_indices):
                     seq_bonus[gi] = frame_bonuses[li]
+                    cec_scores[gi] = cec_val
 
             if seq_bonus.max() > 0:
                 seq_bonus = seq_bonus / seq_bonus.max()
 
-            visual_scores = (base_visual * 0.45) + (seq_bonus * 1.55)
+            # Fusion cân bằng: 70% Global Holistic + 15% Max Phase + 15% DP Sequence
+            max_phase_sim = np.max(phase_sims, axis=0)
+            visual_scores = (global_sim * 0.70) + (max_phase_sim * 0.15) + (seq_bonus * 0.15)
         else:
-            # Single-Span 6D Aspect Prompts
-            prompt_list = list(aspect_prompts.values()) if isinstance(aspect_prompts, dict) else aspect_prompts
-            if not prompt_list:
-                prompt_list = [query_en]
-            print(f"[Search] 6D Aspect mode: {len(prompt_list)} prompts ({active_track.upper()})")
-            rrf_scores = self._compute_rrf_visual(prompt_list, top_per=2500, k_rrf=60)
-            visual_scores = self._min_max_norm(rrf_scores)
+            # Single-Span / Holistic Mode
+            prompt_list = [global_text]
+            for k in ["action", "object", "scene"]:
+                if aspect_prompts.get(k) and aspect_prompts[k] != global_text:
+                    prompt_list.append(aspect_prompts[k])
+
+            if len(prompt_list) > 1:
+                p_feats = self.visual_retriever.encode_text(prompt_list)
+                p_sims = self.visual_retriever.compute_similarity(p_feats, self.image_features)
+                aspect_max = np.max(p_sims[1:], axis=0)
+                visual_scores = (global_sim * 0.80) + (aspect_max * 0.20)
+            else:
+                visual_scores = global_sim
+            cec_scores = visual_scores
 
         # 6. ASR Scoring (BM25 + Gaussian Smoothing)
         audio_scores = np.zeros(N, dtype=np.float32)
@@ -383,14 +363,16 @@ class RetrievalEngine:
                             anchor_boost[idx] = float(sim)
                             break
 
-        # 8. Modality Fusion
+        # 8. Modality Fusion — Additive capped: ASR chỉ boost tối đa 15% so với visual max
         if effective_audio_weight > 0 and audio_scores.max() > 0:
-            final_scores = visual_scores * (1.0 + effective_audio_weight * audio_scores)
+            asr_cap = float(visual_scores.max()) * 0.15
+            asr_bonus = np.minimum(effective_audio_weight * audio_scores * float(visual_scores.max()) * 0.25, asr_cap)
+            final_scores = visual_scores + asr_bonus
         else:
             final_scores = visual_scores
 
         if anchor_boost.max() > 0:
-            final_scores = final_scores + (anchor_boost * 0.6)
+            final_scores = final_scores + (anchor_boost * 0.15)
 
         # 9. Video Filtering
         valid_indices = None
@@ -405,8 +387,8 @@ class RetrievalEngine:
             mask[valid_indices] = True
             final_scores[~mask] = -1e9
 
-        # 10. Adaptive Candidate Pool (100 / 300 / 500)
-        candidate_k = min(500 if is_multi_phase else 250, N if valid_indices is None else len(valid_indices))
+        # 10. Adaptive Candidate Pool
+        candidate_k = min(500, N if valid_indices is None else len(valid_indices))
         if valid_indices is not None:
             pool_scores = np.array([final_scores[i] for i in valid_indices if final_scores[i] > -1e8])
             candidate_k = min(candidate_k, len(pool_scores))
@@ -434,8 +416,7 @@ class RetrievalEngine:
             real_frame = int(_frame)
             img_path = self.get_image_path(v_name, kf_id, real_frame)
 
-            # Consensus Bonus (nếu ở mode Hybrid)
-            consensus_bonus = 0.15 if active_track == "hybrid" and visual_norm_arr[idx] >= 0.6 else 0.0
+            consensus_bonus = 0.05 if active_track == "hybrid" and visual_norm_arr[idx] >= 0.8 else 0.0
 
             candidate_items.append({
                 "index": idx,
@@ -448,11 +429,12 @@ class RetrievalEngine:
                 "visual_norm": float(visual_norm_arr[idx]),
                 "seq_norm": float(seq_norm_arr[idx]),
                 "asr_norm": float(audio_norm_arr[idx]),
+                "cec": float(cec_scores[idx]),
                 "has_anchor_match": bool(anchor_boost[idx] > 0),
                 "consensus_bonus": consensus_bonus
             })
 
-        # 11. Constraint Graph Evidence Judge Re-ranking
+        # STAGE 3: EVIDENCE JUDGE V3.3 RE-RANKING & 3-LEVEL VETO
         ranked = self.evidence_engine.rank_candidates(candidate_items, intent_flags, diversity_top_2=diversity_top_2)
 
         results = []
@@ -462,7 +444,9 @@ class RetrievalEngine:
 
         intent_flags["active_track"] = active_track
         if results:
-            print(f"[Search] Top-1: {results[0]['score']:.2f} | Tier: {results[0].get('tier')} | CSR: {results[0].get('csr', 1.0):.2f} | Track: {active_track.upper()}")
+            t0_badge = "✅ CERTIFIED TIER_0" if results[0].get("tier") == "TIER_0" else f"🔒 {results[0].get('tier')}"
+            ambig_badge = "⚠️ AMBIGUOUS" if results[0].get("is_ambiguous") else "🎯 CONFIDENT"
+            print(f"[Search] Top-1: {results[0]['video']} F{results[0]['frame']} | Score: {results[0]['score']:.2f} | {t0_badge} | Track: {active_track.upper()}")
 
         return results, query_en, intent_flags
 

@@ -49,7 +49,8 @@ CRITICAL CONSTRAINTS (ANTI-HALLUCINATION & PROVENANCE):
 1. NEVER hallucinate details not mentioned in the query. If background/scene/action/relation is not specified, set its field to null. (e.g. "a red truck" -> scene: null, action: null, relations: null).
 2. For ambiguous objects (e.g. "vật dài" / "long object"), DO NOT arbitrarily commit to a single object like "baseball bat". Instead, provide a canonical generic representation and at most 2 alternative hypotheses.
 3. Keep 'hypotheses' bounded (top 1-2 alternatives only, DO NOT generate Cartesian product explosions).
-4. Strip all introductory conversational meta-text ("Đoạn phim bắt đầu bằng", "The video shows", "We see").
+4. Extract complex constraints (counting, attributes, relations) strictly into the 'constraints' array, DO NOT dilute them into the canonical prompt.
+5. Strip all introductory conversational meta-text ("Đoạn phim bắt đầu bằng", "The video shows", "We see").
 
 You MUST return a single, valid JSON object matching this exact schema:
 {
@@ -75,15 +76,21 @@ You MUST return a single, valid JSON object matching this exact schema:
     "attributes": "color/clothing string or null",
     "relations": "spatial/interaction string (e.g. 'man LEFT_OF car') or null"
   },
+  "constraints": [
+    {
+      "constraint_type": "COUNT", 
+      "target_entity": "e.g., people",
+      "condition": "e.g., == 3",
+      "is_hard": true
+    }
+  ],
   "source_grounding": [
     {"source_vi": "vật dài", "canonical_en": "long object", "source_type": "explicit"}
   ],
   "hard_anchors": ["exact quotes, license numbers, OCR texts"],
   "has_speech": true | false,
   "speech_keywords": ["Vietnamese keywords for ASR speech transcript search if query mentions spoken words"],
-  "is_qa": true | false,
-  "qa_target": "what specific question needs answering or null",
-  "qa_answer_type": "number" | "color" | "yes_no" | "entity" | null
+  "is_qa": true | false
 }
 """
 

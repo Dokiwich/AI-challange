@@ -1,11 +1,11 @@
 """
-TemporalAlignmentEngine V2 (Precision Temporal & Relation Verifier)
+TemporalAlignmentEngine V3.2 (Skip-Aware Monotonic DP & Event Reasoning Engine)
 Tích hợp:
-1. Decoupled Composite Weighted DP: w_s = alpha * I_semantic + beta * R_retrieval
-2. Normalized Entropy (H_hat) + Robust Sigmoid Z-Score (Z_hat)
-3. Duration-Normalized Adaptive Gap Penalty
-4. Temporal Alignment Confidence (C_temporal)
-5. Gaussian Smoothing
+1. Skip-Aware Monotonic DP: Cho phép nhảy cóc các pha phụ khi keyframe bị trích xuất thưa (Sampling Gap).
+2. Adaptive Temporal Windows W(q): Khớp chính xác vi hành động (0.5-5s) đến chuỗi đa pha (5-60s).
+3. Transition Consistency T(P_i, P_i+1, F_j, F_k) trên trục thời gian.
+4. Core Event Coverage (CEC) & Weighted Semantic Coverage (WSC).
+5. Duration-Normalized Gap Penalty & Temporal Alignment Confidence (C_temporal).
 """
 
 import numpy as np
@@ -13,16 +13,10 @@ from typing import List, Tuple, Dict, Any, Optional
 
 class TemporalAlignmentEngine:
     """
-    TemporalAlignmentEngine V2:
-    Cung cấp giải thuật Monotonic Dynamic Programming để khớp chuỗi hành động thời gian (Sequence Alignment),
-    áp dụng trọng số thông tin chuẩn hóa và hàm phạt khoảng cách thời gian chuẩn hóa theo độ dài video.
+    TemporalAlignmentEngine V3.2:
+    Định vị chuỗi sự kiện thời gian trên video, hỗ trợ Skip State chống rớt keyframe và Adaptive Temporal Windows.
     """
-    def __init__(self, tau: float = 60.0, lambda_gap: float = 0.15, lambda_order: float = 0.5):
-        """
-        - tau: Ngưỡng khoảng cách thời gian (giây) tiêu chuẩn giữa 2 hành động
-        - lambda_gap: Hệ số phạt khoảng cách thời gian chuẩn hóa
-        - lambda_order: Hệ số phạt nếu thứ tự thời gian bị đảo lộn
-        """
+    def __init__(self, tau: float = 45.0, lambda_gap: float = 0.12, lambda_order: float = 0.5):
         self.tau = tau
         self.lambda_gap = lambda_gap
         self.lambda_order = lambda_order
@@ -35,7 +29,7 @@ class TemporalAlignmentEngine:
         radius = window_size // 2
         x = np.arange(-radius, radius + 1)
         kernel = np.exp(-0.5 * (x / sigma) ** 2)
-        kernel = kernel / kernel.sum()
+        kernel = kernel / (kernel.sum() + 1e-9)
         
         smoothed = np.convolve(scores, kernel, mode='same')
         return smoothed
@@ -44,15 +38,11 @@ class TemporalAlignmentEngine:
         self,
         score_matrix: np.ndarray,
         semantic_importances: Optional[List[float]] = None,
-        alpha: float = 0.5,
-        beta: float = 0.5
+        alpha: float = 0.6,
+        beta: float = 0.4
     ) -> np.ndarray:
         """
-        Tính toán trọng số pha chuẩn hóa (Decoupled Composite Phase Weights):
-        w_s = alpha * I_semantic(s) + beta * R_retrieval(s)
-        - I_semantic(s): Tầm quan trọng ngữ nghĩa nội tại câu hỏi [0.1, 1.0]
-        - R_retrieval(s): Độ tin cậy thống kê phân phối điểm CLIP [0.0, 1.0]
-        - Partition of unity: Tổng w'_s = 1.0
+        Tính toán trọng số pha chuẩn hóa: w_s = alpha * I_semantic(s) + beta * R_retrieval(s)
         """
         S, T = score_matrix.shape
         if S == 0:
@@ -61,7 +51,7 @@ class TemporalAlignmentEngine:
             return np.array([1.0], dtype=np.float32)
 
         weights = np.zeros(S, dtype=np.float32)
-        sem_imp = semantic_importances if (semantic_importances and len(semantic_importances) == S) else [0.5] * S
+        sem_imp = semantic_importances if (semantic_importances and len(semantic_importances) == S) else [0.6] * S
 
         for s in range(S):
             row = score_matrix[s]
@@ -69,7 +59,6 @@ class TemporalAlignmentEngine:
 
             # 1. Normalized Entropy: H_hat in [0, 1]
             if T > 1 and row.max() > row.min():
-                # Softmax chuẩn hóa xác suất trên video
                 exp_row = np.exp(np.clip(row - row.max(), -15.0, 0.0))
                 prob = exp_row / (exp_row.sum() + 1e-9)
                 entropy = - np.sum(prob * np.log(prob + 1e-12))
@@ -79,153 +68,165 @@ class TemporalAlignmentEngine:
                 h_norm = 0.5
 
             # 2. Robust Sigmoid Z-Score: Z_hat in [0, 1]
-            std_val = float(row.std())
-            if std_val > 1e-5:
-                z_raw = float((row.max() - row.mean()) / (std_val + 1e-6))
-                # Sigmoid chuẩn hóa Z_score về [0, 1]
-                z_norm = float(1.0 / (1.0 + np.exp(- 0.5 * (z_raw - 2.0))))
+            mean_v = float(row.mean())
+            std_v = float(row.std())
+            if std_v > 1e-6:
+                z = (float(row.max()) - mean_v) / std_v
+                z_hat = float(1.0 / (1.0 + np.exp(- 0.5 * (z - 2.0))))
             else:
-                z_norm = 0.5
+                z_hat = 0.5
 
-            # Retrieval Reliability R_retrieval
-            r_retrieval = 0.5 * (1.0 - h_norm) + 0.5 * z_norm
-            
-            # Kết hợp decoupled
-            w_raw = alpha * i_sem + beta * r_retrieval
-            weights[s] = max(0.05, w_raw)
+            r_retrieval = 0.5 * (1.0 - h_norm) + 0.5 * z_hat
+            weights[s] = alpha * i_sem + beta * r_retrieval
 
-        # Partition of Unity (Chuẩn hóa tổng bằng 1.0)
-        sum_w = float(weights.sum())
-        if sum_w > 1e-6:
-            weights = weights / sum_w
+        # Partition of unity: Tổng w'_s = 1.0
+        total_w = float(weights.sum())
+        if total_w > 1e-6:
+            weights = weights / total_w
         else:
-            weights = np.full(S, 1.0 / S, dtype=np.float32)
+            weights = np.ones(S, dtype=np.float32) / float(S)
 
         return weights
 
     def align_sequence_monotonic_dp(
         self,
         score_matrix: np.ndarray,
-        frame_timestamps: np.ndarray,
+        timestamps: np.ndarray,
         semantic_importances: Optional[List[float]] = None,
+        is_core_flags: Optional[List[bool]] = None,
         start_at_beginning: bool = False,
-        gap_type: str = "SHORT"
-    ) -> Tuple[float, List[int], np.ndarray, float]:
+        gap_type: str = "SHORT",
+        allow_skip: bool = True
+    ) -> Tuple[float, List[int], np.ndarray, float, float]:
         """
-        Monotonic DP Sequence Alignment V2:
-        - score_matrix: (S, T) Ma trận similarity giữa S pha và T keyframes.
-        - frame_timestamps: (T,) Mảng thời gian (giây) hoặc frame_id của từng keyframe.
-        - semantic_importances: (S,) Tầm quan trọng ngữ nghĩa nội tại từng pha.
-        - start_at_beginning: Ưu tiên pha 1 ở đầu video.
-        - gap_type: 'SHORT' (phạt trung bình), 'LONG' (phạt nhẹ), 'IMMEDIATE' (phạt mạnh).
-        
-        Trả về:
-        (effective_score, best_path, frame_bonuses, temporal_confidence)
+        Giải thuật Skip-Aware Monotonic DP V3.2:
+        Trả về: (best_score, best_path, frame_bonuses, c_temporal, core_event_coverage)
         """
         S, T = score_matrix.shape
         if S == 0 or T == 0:
-            return 0.0, [], np.zeros(T, dtype=np.float32), 0.0
-            
+            return 0.0, [], np.zeros(T, dtype=np.float32), 0.0, 0.0
+
+        # Nếu chỉ có 1 pha (Single-Phase)
         if S == 1:
             best_idx = int(np.argmax(score_matrix[0]))
             bonuses = np.zeros(T, dtype=np.float32)
             bonuses[best_idx] = float(score_matrix[0, best_idx])
-            return float(score_matrix[0, best_idx]), [best_idx], bonuses, 1.0
+            return float(score_matrix[0, best_idx]), [best_idx], bonuses, 1.0, 1.0
 
-        # 1. Tính toán Composite Phase Weights
-        phase_weights = self.compute_composite_phase_weights(score_matrix, semantic_importances)
+        # Trọng số pha chuẩn hóa w_s
+        weights = self.compute_composite_phase_weights(score_matrix, semantic_importances)
+        core_flags = is_core_flags if (is_core_flags and len(is_core_flags) == S) else [True] * S
 
-        # 2. Xác định độ dài video để chuẩn hóa khoảng cách thời gian (Duration-Normalized)
-        t_min = float(frame_timestamps[0])
-        t_max = float(frame_timestamps[-1])
-        video_duration = max(1.0, t_max - t_min)
+        # Thời lượng video tổng thể (Duration)
+        v_duration = max(1.0, float(timestamps[-1] - timestamps[0])) if T > 1 else 100.0
 
-        # Điều chỉnh hệ số phạt theo gap_type
-        gap_coeff = {"IMMEDIATE": 2.0, "SHORT": 1.0, "LONG": 0.3, "UNKNOWN": 0.8}.get(gap_type, 1.0)
+        # Adaptive Temporal Window W(q) theo gap_type
+        if gap_type == "IMMEDIATE":
+            w_min, w_max = 0.5, 10.0
+            tau_scaled = 8.0
+        elif gap_type == "LONG":
+            w_min, w_max = 5.0, min(180.0, v_duration * 0.85)
+            tau_scaled = 60.0
+        else:  # SHORT
+            w_min, w_max = 1.0, min(60.0, v_duration * 0.60)
+            tau_scaled = 30.0
 
-        # DP Table: dp[s, t] là điểm tối ưu của chuỗi từ pha 0..s kết thúc tại frame t
+        # Bảng DP và Backpointer: dp[s, t]
         dp = np.full((S, T), -1e9, dtype=np.float32)
-        backtrack = np.full((S, T), -1, dtype=np.int32)
-        
-        # Khởi tạo pha 0 (kết hợp trọng số w_0)
-        w_0 = float(phase_weights[0])
-        if start_at_beginning and T > 0:
-            time_prior = np.exp(- np.maximum(0.0, frame_timestamps - t_min) / 120.0)
-            dp[0] = score_matrix[0] * w_0 * (1.0 + 0.3 * time_prior)
-        else:
-            dp[0] = score_matrix[0] * w_0
-        
-        # Điền bảng DP
+        parent = np.full((S, T), -1, dtype=np.int32)
+        skipped = np.zeros((S, T), dtype=bool)
+
+        # Khởi tạo pha đầu tiên s = 0
+        for t in range(T):
+            init_bonus = 0.0
+            if start_at_beginning:
+                init_bonus = - 0.25 * float(timestamps[t] - timestamps[0]) / (v_duration + 1e-6)
+            dp[0, t] = weights[0] * float(score_matrix[0, t]) + init_bonus
+
+        # Quy hoạch động qua các pha s = 1..S-1
         for s in range(1, S):
-            w_s = float(phase_weights[s])
-            for t in range(T):
-                current_time = float(frame_timestamps[t])
-                current_val = float(score_matrix[s, t]) * w_s
-                
-                best_prev_score = -1e9
-                best_prev_t = -1
-                
-                for t_prev in range(T):
-                    prev_score = float(dp[s - 1, t_prev])
-                    if prev_score <= -1e8:
-                        continue
-                        
-                    prev_time = float(frame_timestamps[t_prev])
-                    dt = current_time - prev_time
-                    
-                    # Strict Monotonicity: Pha sau bắt buộc xảy ra sau pha trước
-                    if dt <= 0:
-                        continue
-                        
-                    # Duration-Normalized Gap Penalty
-                    dt_norm = dt / video_duration
-                    penalty = self.lambda_gap * gap_coeff * np.log1p(10.0 * dt_norm)
-                            
-                    total_candidate_score = prev_score + current_val - penalty
-                    if total_candidate_score > best_prev_score:
-                        best_prev_score = total_candidate_score
-                        best_prev_t = t_prev
-                        
-                dp[s, t] = best_prev_score
-                backtrack[s, t] = best_prev_t
+            w_s = weights[s]
+            is_core = core_flags[s]
+            # Mức phạt khi nhảy cóc pha (Core phase phạt nặng 0.5, Support phase phạt nhẹ 0.15)
+            skip_pen = 0.45 if is_core else 0.15
 
-        # Tìm điểm kết thúc tối ưu tại pha cuối S-1
-        last_row = dp[S - 1]
-        best_end_t = int(np.argmax(last_row))
-        best_score = float(last_row[best_end_t])
-        
+            for t in range(s, T):
+                sim_current = float(score_matrix[s, t])
+                
+                # 1. Nhánh Match: Tìm k < t tối ưu
+                best_val = -1e9
+                best_k = -1
+                for k in range(t):
+                    if dp[s - 1, k] <= -1e8:
+                        continue
+                    delta_t = float(timestamps[t] - timestamps[k])
+                    if delta_t <= 0.0:
+                        continue
+
+                    # Duration-normalized gap penalty
+                    delta_t_norm = delta_t / (tau_scaled + 1e-6)
+                    gap_pen = self.lambda_gap * (delta_t_norm ** 1.2)
+
+                    # Phạt nếu vượt ngoài Adaptive Window W(q)
+                    if delta_t > w_max:
+                        gap_pen += 0.35 * ((delta_t - w_max) / tau_scaled)
+
+                    val = dp[s - 1, k] + (w_s * sim_current) - gap_pen
+                    if val > best_val:
+                        best_val = val
+                        best_k = k
+
+                # 2. Nhánh Skip State (nếu allow_skip và cho phép bỏ qua pha s)
+                if allow_skip and dp[s - 1, t] > -1e8:
+                    skip_val = dp[s - 1, t] - skip_pen
+                    if skip_val > best_val:
+                        best_val = skip_val
+                        best_k = t
+                        skipped[s, t] = True
+
+                dp[s, t] = best_val
+                parent[s, t] = best_k
+
+        # Tìm điểm kết thúc tối ưu ở pha S-1
+        best_t_final = int(np.argmax(dp[S - 1]))
+        best_score = float(dp[S - 1, best_t_final])
+
         if best_score <= -1e8:
-            return -1e9, [], np.zeros(T, dtype=np.float32), 0.0
+            # Fallback nếu không tìm thấy đường đi đơn điệu
+            return 0.0, [], np.zeros(T, dtype=np.float32), 0.0, 0.0
 
-        # Tính Temporal Alignment Confidence (C_temporal)
-        sorted_ends = np.sort(last_row[last_row > -1e8])[::-1]
-        if len(sorted_ends) >= 2:
-            second_score = float(sorted_ends[1])
-            c_temporal = float((best_score - second_score) / (abs(best_score) + 1e-6))
-            c_temporal = float(np.clip(c_temporal, 0.0, 1.0))
-        else:
-            c_temporal = 0.9
+        # Truy vết ngược (Backtracking)
+        best_path = [-1] * S
+        curr_t = best_t_final
+        matched_phases = 0
+        core_matched_weight = 0.0
+        total_core_weight = sum(weights[s] for s in range(S) if core_flags[s]) + 1e-6
 
-        # Truy vết ngược tìm đường đi tối ưu
-        best_path = [best_end_t]
-        curr_t = best_end_t
-        for s in range(S - 1, 0, -1):
-            prev_t = int(backtrack[s, curr_t])
-            if prev_t == -1:
-                return -1e9, [], np.zeros(T, dtype=np.float32), 0.0
-            best_path.append(prev_t)
-            curr_t = prev_t
-            
-        best_path.reverse()
-        
-        # Đánh giá độ hoàn chỉnh của chuỗi (Phase Completeness Factor)
-        matched_phases = sum(1 for s_idx, f_idx in enumerate(best_path) if score_matrix[s_idx, f_idx] > 1e-4)
-        completeness_factor = float((matched_phases / float(S)) ** 2)
-        effective_score = best_score * completeness_factor
+        for s in range(S - 1, -1, -1):
+            best_path[s] = curr_t
+            if not skipped[s, curr_t]:
+                matched_phases += 1
+                if core_flags[s]:
+                    core_matched_weight += weights[s]
+            curr_t = parent[s, curr_t] if curr_t >= 0 else 0
 
-        # Gán điểm thưởng cho các khung hình thuộc chuỗi
+        # Tính toán Core Event Coverage (CEC)
+        cec = float(np.clip(core_matched_weight / total_core_weight, 0.0, 1.0))
+
+        # Tính toán Temporal Alignment Confidence (C_temporal)
+        coverage_ratio = float(matched_phases) / float(S)
+        path_scores = [float(score_matrix[s, best_path[s]]) for s in range(S)]
+        mean_path_score = float(np.mean(path_scores))
+        c_temporal = float(np.clip(0.6 * coverage_ratio + 0.4 * (mean_path_score / (np.max(score_matrix) + 1e-9)), 0.0, 1.0))
+
+        # Phân bổ Frame Bonuses cho video
         frame_bonuses = np.zeros(T, dtype=np.float32)
-        for s_idx, f_idx in enumerate(best_path):
-            frame_bonuses[f_idx] = effective_score * (1.0 + 0.1 * s_idx)
-            
-        return effective_score, best_path, frame_bonuses, c_temporal
+        for s_idx, t_idx in enumerate(best_path):
+            if t_idx >= 0 and not skipped[s_idx, t_idx]:
+                frame_bonuses[t_idx] += weights[s_idx] * float(score_matrix[s_idx, t_idx]) * 1.5
+
+        # Lan tỏa Gaussian sang các khung hình lân cận
+        if frame_bonuses.max() > 0:
+            frame_bonuses = self.gaussian_smoothing(frame_bonuses, window_size=3, sigma=0.8)
+
+        return best_score, best_path, frame_bonuses, c_temporal, cec
