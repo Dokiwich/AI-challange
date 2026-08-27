@@ -1,3 +1,0 @@
-TeamAccount: aic2026-180
-
-TeamPassword: jtt7ikKvj8lx
