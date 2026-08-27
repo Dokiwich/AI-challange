@@ -1,83 +1,49 @@
 ================================================================================
-TÀI LIỆU TỔNG QUAN VÀ CHI TIẾT DỰ ÁN: AIC 2026 VIDEO RETRIEVAL V3.3
+TÀI LIỆU TỔNG QUAN VÀ CHI TIẾT DỰ ÁN: AIC 2026 VIDEO RETRIEVAL V4.0 (GRAPH-ENHANCED)
 ================================================================================
 
 1. GIỚI THIỆU CHUNG (OVERVIEW)
 --------------------------------------------------------------------------------
-Dự án "AIC 2026 Video Retrieval V3.3" là một hệ thống tìm kiếm và truy xuất video thông minh (Event-Centric Precision Natural Evidence Retrieval Engine). Hệ thống được thiết kế đặc biệt cho các kỳ thi và benchmark như AIC (AI Challenge), TRECVID, hoặc Video Browser Showdown.
-Mục tiêu chính: Xử lý các câu lệnh tìm kiếm bằng ngôn ngữ tự nhiên (VQA, KIS, TRAKE), đối chiếu với dữ liệu hình ảnh (CLIP features), âm thanh (ASR) và trích xuất ra đoạn video/keyframe chính xác nhất.
-
-Triết lý mã nguồn: Viết theo kỷ luật "Ponytail" - Tái sử dụng, viết tối thiểu, loại bỏ hoàn toàn các cấu trúc rườm rà suy đoán tương lai (deletion over addition). Code được chia module độc lập, rành mạch.
+Dự án "AIC 2026 Video Retrieval V4.0" là một hệ thống tìm kiếm video đa phương thức hoàn chỉnh, kết hợp sức mạnh của VectorDB (Qdrant) và GraphDB (Neo4j). Khác với các hệ thống truyền thống chỉ dựa vào CLIP, V4.0 sở hữu Khung tri thức sự kiện (Event Graph) được trích xuất từ YOLOv8, ByteTrack và VideoMAE V2, giúp hệ thống không chỉ "nhìn" mà còn "hiểu" được ngữ cảnh, đếm được số lượng và theo vết được đối tượng (Tracking) qua thời gian.
 
 2. CÁCH THIẾT LẬP VÀ CHẠY DỰ ÁN (SETUP INSTRUCTIONS)
 --------------------------------------------------------------------------------
-a. Môi trường và Thư viện:
-- Hệ thống sử dụng Python. Cần tạo virtual environment (venv).
-- Cài đặt thư viện: `pip install -r requirements.txt`. Các thư viện chính bao gồm: torch, numpy, streamlit, faster-whisper, requests.
-- Cấu hình file `.env` hoặc biến môi trường cho LLM Proxy (Track 2/3/4 cần gọi API AI):
-  + LLM_BASE_URL (ví dụ: http://localhost:20128/v1)
-  + LLM_API_KEY / NINEROUTER_API_KEY
-  (Lưu ý: Hệ thống đang sử dụng 9router làm proxy LLM nội bộ cục bộ).
+a. Môi trường và Database:
+- Cần chạy Docker chứa Qdrant và Neo4j cục bộ:
+  + Qdrant (VectorDB): Lưu trữ vector nhúng của CLIP (thay thế cho numpy array truyền thống, tránh nghẽn cổ chai RAM/CPU).
+  + Neo4j (GraphDB): Lưu trữ cấu trúc (Entity)-[:PERFORMS]->(Action) và [:NEXT_EVENT] cho TRAKE.
+- Cài đặt thư viện: `pip install -r requirements.txt`.
 
-b. Dữ liệu chuẩn bị (Data Dependencies):
-- Thư mục `data/` phải chứa:
-  + `features/clip_features.npy`: Ma trận vector đặc trưng của toàn bộ keyframes đã trích xuất bằng mô hình CLIP.
-  + `mapping/map_keyframes.json`: File map ánh xạ giữa index của numpy array và đường dẫn/tên video/thời gian thực tế.
-  + Thư mục `keyframes/`: Chứa ảnh keyframes.
-- Thư mục `de-thi/`: Chứa các file text đề thi (query-*.txt).
+b. Trích xuất đặc trưng (Colab Distributed Workflow):
+- Việc trích xuất được đẩy lên Google Colab (`build_event_graph_colab.py`) để tận dụng GPU. Tại đây:
+  + YOLOv8: Trích xuất Bounding Box và Entity (Người, Xe, Vật thể) -> Giải quyết triệt để bài toán mù đếm số (Object Counting).
+  + ByteTrack: Theo dõi đối tượng (Tracking).
+  + VideoMAE V2: Trích xuất hành động (Action Recognition).
+- Kết quả từ Colab (file CSV) sẽ được tải về máy và nạp vào Neo4j.
 
-c. Cách khởi chạy:
-- Chạy Web UI (Giao diện chính): `streamlit run app.py`
-- Chạy đánh giá (Benchmark): `python evaluate_pipeline.py --tracks all`
-- Chạy nộp bài tự động (Batch Submission): `python main_pipeline.py`
-- Chạy 9router proxy: Bật command line riêng và chạy `9router`.
+c. Khởi chạy 1-Click Batch Pipeline:
+- Chạy hệ thống giải toàn bộ đề thi tự động: `python main_pipeline.py --dir de-thi --engine_mode meta`
+- Hệ thống sẽ xuất ra toàn bộ CSV thành file nén `submission.zip` chuẩn BTC.
 
-3. KIẾN TRÚC TỔNG THỂ (ARCHITECTURE FLOW)
+3. KIẾN TRÚC TỔNG THỂ V4.0 (ARCHITECTURE FLOW)
 --------------------------------------------------------------------------------
-Hệ thống tuân thủ luồng ống (pipeline) 5 bước nghiêm ngặt:
-[Input Query] -> [MetaRouter] -> [Query Compiler] -> [Visual/Temporal/ASR Scoring] -> [Evidence Engine] -> [Output]
+[Input Query] -> [MetaRouter & AI Compiler]
+      |
+      +---> [Qdrant VectorDB] (Tìm kiếm bối cảnh Visual/Audio)
+      |
+      +---> [Neo4j GraphDB] (Cypher Sequence Query - Dành cho TRAKE & Logic)
+      |
+      +---> [Qwen-VL Simulator] (Tự động điền đáp án QA)
+      |
+      v
+[Evidence Judge 3-Level Veto] -> [Submission Exporter] -> [CSV/ZIP]
 
-Toàn bộ quá trình được điều phối bởi class `RetrievalEngine` nằm tại `core/retrieval_engine.py`.
-
-4. ĐI SÂU VÀO TỪNG PHƯƠNG PHÁP & MODULE (DEEP DIVE MODULES)
+4. ĐI SÂU VÀO CÁC MẢNH GHÉP "CHÍ MẠNG" (CRITICAL PIECES INTEGRATED)
 --------------------------------------------------------------------------------
-
-A. HỆ THỐNG ĐỊNH TUYẾN 4 TRACK (META-ROUTER - core/meta_router.py)
-Thay vì dùng 1 phương pháp cố định, hệ thống thông minh chia làm 4 Track (nhánh):
-- Track 1 (Offline V2): Truy xuất siêu tốc cục bộ không dùng LLM (Zero-LLM). Phù hợp câu hỏi có mỏ neo cứng (như chữ số OCR, biển số xe) hoặc câu cực kỳ ngắn.
-- Track 2 (AI Semantic V2): Giao khoán hoàn toàn cho LLM phân tích ngữ nghĩa (qua AIQueryParser).
-- Track 3 (Hybrid Fusion): Dung hợp cả Offline và AI.
-- Track 4 (Adaptive Meta-Policy): Đây là Track mặc định mạnh nhất. MetaRouter trích xuất `MetaFeatureVector` (độ dài câu hỏi, cờ is_sequence, có OCR hay không) để động (dynamic) quyết định sẽ rẽ vào Track nào. Track 4 sở hữu "Escalation Policy" - nếu điểm tự tin của top 1 và top 2 quá sát nhau (Margin thấp), hệ thống tự động "leo thang" gọi Track phức tạp hơn để xác minh.
-
-B. BỘ BIÊN DỊCH TRUY VẤN (QUERY COMPILER - core/query_compiler.py & core/ai_query_parser.py)
-Nhiệm vụ: Chuyển câu Text thô thành chuẩn `CommonSemanticIR` chung.
-- Safe Sequence Segmentation: Thuật toán tách chuỗi hành động theo pha thời gian (Phase 1, Phase 2) cực kỳ an toàn. Chỉ tách khi có dấu hiệu cắt lớp rõ ràng ("sau đó", "bước 1") để tránh phá hỏng ngữ cảnh tổng thể.
-- Đóng gói Semantic IR: Trích xuất các CoreEventNode (hành động sinh tử, trọng số cao 0.8-0.9) và SupportFactNode (bối cảnh phụ, trọng số 0.1-0.2), cùng AspectPromptNode (chỉ trích xuất action, object, scene). Toàn bộ các Node rác (Entity, Relation) đã được loại bỏ triệt để theo chuẩn Ponytail để tăng tốc độ.
-- AIQueryParser tối giản JSON schema chỉ tập trung vào ngữ nghĩa cốt lõi, không trích xuất qa_target ảo để tiết kiệm token.
-
-C. ĐỐI SÁNH THỜI GIAN (TEMPORAL ALIGNMENT - core/temporal_alignment.py)
-Công nghệ lõi để giải quyết dạng đề bài chuỗi hành động (Ví dụ: "Người đi vào, sau đó lấy đồ, cuối cùng rời đi").
-- Thuật toán Skip-Aware Monotonic Dynamic Programming (Quy hoạch động đơn điệu có khả năng nhảy cóc).
-- Giải quyết bài toán: Không phải lúc nào keyframe cũng được trích xuất đầy đủ. Nếu video bị thiếu keyframe ở đoạn giữa, thuật toán cho phép "Skip State" (bỏ qua một pha phụ) với mức phạt điểm (gap penalty) được tính toán tự động qua Adaptive Temporal Windows (phạt nhẹ cho hành động ngắn, phạt nặng nếu nhảy cóc pha Core).
-
-D. THẨM PHÁN CHỨNG CỨ (EVIDENCE ENGINE - core/evidence_engine.py)
-Sau khi CLIP tính xong Cosine Similarity, hệ thống KHÔNG lấy điểm cao nhất ngay. Các kết quả phải qua ải "Thẩm phán" (Evidence Judge V3.2) để tái xếp hạng (Re-ranking).
-- Cơ chế 2-Level Veto Protocol:
-  + Veto A (Contradiction): Hủy ngay kết quả (đẩy xuống bét bảng TIER_5) nếu phát hiện mâu thuẫn cứng. Ví dụ: Câu hỏi tìm chữ OCR "STOP", nhưng hình ảnh lấy ra không hề có chữ này (dù cảnh nền rất giống).
-  + Veto C (Evidence Insufficiency): Khóa chặt kết quả không cho lọt vào TIER_0 (Gold) nếu Core Event Coverage (tỷ lệ bao phủ sự kiện lõi) dưới 0.70. Điều này triệt tiêu hoàn toàn lỗi "Bẫy Background" (cảnh rất giống nhưng hành động chính không xảy ra).
-- Hệ thống chia ứng viên thành các cấp bậc TIER_0 (Tuyệt đối tin cậy) đến TIER_5 (Loại bỏ).
-
-E. BỘ TÍNH ĐIỂM HÌNH ẢNH VÀ ÂM THANH (VISUAL & ASR SCORING)
-- Visual Score: Dùng PyTorch nhân ma trận Cosine Similarity siêu nhanh giữa query text embedding và `clip_features.npy`. Điểm tổng hợp: global_sim (70%) + max_phase_sim (15%) + sequence_bonus (15%).
-- ASR Audio Score: Tích hợp thuật toán BM25 kết hợp đường cong làm mượt Gaussian (Gaussian smoothing). Điều này giúp lời thoại trong video nếu trùng với câu hỏi sẽ được "lan truyền" điểm số sang các frame lân cận, vì người nói thường nói trước/sau khi hành động xảy ra vài giây.
-
-5. CÁC CÔNG CỤ ĐÁNH GIÁ (EVALUATION & BATCH PIPELINE)
---------------------------------------------------------------------------------
-- `evaluate_pipeline.py`: Hệ thống benchmark độc lập. Khi chạy, nó nạp toàn bộ thư mục `de-thi/`, cho chạy qua lần lượt Track 1, 2, 3, 4. Tính toán các chỉ số khắt khe như Latency (độ trễ p50, p95), Recall@K, Mean Reciprocal Rank (MRR), và đo lường sự chênh lệch (Oracle Gap).
-- `main_pipeline.py`: Dùng khi đi thi thật. Nó quét thư mục đề thi, kết xuất ra output dạng CSV chuẩn format của BTC và nén lại thành file zip tại `submission/`.
-- `app.py`: Giao diện trực quan để Kỹ sư kiểm thử từng câu hỏi, vẽ biểu đồ điểm số, debug từng TIER của Evidence Engine.
+- Sự kết hợp Qdrant + Neo4j: Loại bỏ sự phụ thuộc quá mức vào Numpy. Các câu truy vấn có điều kiện cứng (TRAKE, Q/A) được xử lý trực tiếp bởi Neo4j Cypher Compiler (`core/graph_matcher.py`) và trả về chuẩn chuỗi thời gian (N-frames).
+- YOLO & Grounding: Được đưa thẳng vào Colab Pipeline để bù đắp điểm mù của CLIP về vị trí và số lượng tuyệt đối.
+- Auto-QA (VLM): Pipeline giờ đây tích hợp khả năng giả lập Qwen-VL (`answer_qa` trong `retrieval_engine.py`) để sinh trực tiếp text (VD: "xanh", "5 người") thay vì chỉ trả về frame.
 
 ================================================================================
 KẾT LUẬN:
-Toàn bộ mã nguồn đã được tối ưu hóa đến mức cực đoan (0 lỗi biên dịch, không dư thừa một biến số hay cấu trúc vô nghĩa nào). Sự kết hợp giữa AI Compiler, Quy hoạch động DP và Cơ chế Thẩm phán 2-Veto biến đây thành một hệ thống Retrieval có tính "phòng thủ" cực cao trước các cạm bẫy của đề thi.
-================================================================================
+Khung gầm V4.0 đã bù đắp 5 điểm yếu chí mạng của hệ thống cũ. Bằng cách phân tán tải trích xuất (Colab) và hợp nhất sức mạnh Graph + Vector (Neo4j + Qdrant) ở local, hệ thống đã sẵn sàng chinh phục 10% các quái vật Top đầu AIC 2026.

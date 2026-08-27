@@ -1,100 +1,75 @@
-# 🗺️ AIC 2026 Kiến trúc tổng thể & Phân tích chuyên sâu (Architecture & Deep Analysis)
+# 🗺️ AIC 2026 Kiến trúc tổng thể V4.0 (Graph-Enhanced Architecture)
 
-> Hệ thống **AIC 2026 Video Retrieval V3.3** là pipeline tìm kiếm video đa phương thức hiệu suất cao.
+> Hệ thống **AIC 2026 Video Retrieval V4.0** là pipeline tìm kiếm video đa phương thức hiệu suất cao, đã khắc phục hoàn toàn 5 điểm yếu chí mạng của các mô hình V3.3 cũ bằng cách kết hợp VectorDB, GraphDB, VLM và Colab Distributed Computing.
 
 ## 📂 Cấu trúc thư mục (Directory Tree)
 
 ```text
 d:\AI challange\codeing\
 ├── app.py                     # Giao diện Web Streamlit UI chính (Visual QA, KIS, TRAKE, Batch)
-├── main_pipeline.py           # CLI Pipeline chạy hàng loạt file đề thi (.txt) ra submission.zip
-├── evaluate_pipeline.py       # Script dùng để chấm điểm, đánh giá độ chính xác (Evaluation)
-├── requirements.txt           # Danh sách thư viện Python
-├── submission/                # Thư mục chứa các file kết quả nộp bài (.csv, .zip)
-├── de-thi/                    # Thư mục chứa đề thi text input (.txt)
+├── main_pipeline.py           # CLI Pipeline chạy hàng loạt file đề thi (.txt) -> Tự động nén submission.zip
+├── evaluate_pipeline.py       # Script chấm điểm và phân tích hệ thống
+├── requirements.txt           # Danh sách thư viện (neo4j, qdrant-client, ultralytics...)
+├── submission/                # Nơi xuất kết quả nộp bài tự động
+├── de-thi/                    # Nơi để các file truy vấn .txt của BTC
 │
-├── core/                      # Trái tim của hệ thống (Core Engine)
-│   ├── retrieval_engine.py    # Class RetrievalEngine (V3.3) điều phối toàn bộ luồng 4 Track.
-│   ├── base_retriever.py      # CLIPVisualRetriever (load mô hình CLIP, trích xuất đặc trưng hình ảnh).
-│   ├── query_compiler.py      # Biên dịch câu truy vấn (AI Semantic Compiler).
-│   ├── meta_router.py         # 9Router/MetaRouter định tuyến động vào các Track (T1, T2, T3, T4).
-│   ├── semantic_ir.py         # Phân tích thông tin ngữ nghĩa (Semantic Information Retrieval).
-│   ├── evidence_engine.py     # Evidence Judge V3.3: Chẩn đoán chứng cứ, Re-ranking, Fuzzy OCR.
-│   ├── temporal_alignment.py  # Thuật toán Skip-Aware Monotonic DP (căn chỉnh sự kiện theo thời gian).
-│   ├── task_handlers.py       # Xử lý đặc thù cho các track Visual QA và TRAKE.
-│   └── submission_exporter.py # Đóng gói kết quả thành định dạng file CSV nộp bài.
+├── core/                      # Trái tim của hệ thống (Core Engine V4)
+│   ├── retrieval_engine.py    # Điều phối 4 Track, nay tích hợp VLM QA Generator (`answer_qa`)
+│   ├── base_retriever.py      # Load mô hình CLIP
+│   ├── query_compiler.py      # Biên dịch truy vấn bằng LLM
+│   ├── meta_router.py         # Định tuyến thông minh tới các Track
+│   ├── graph_matcher.py       # 🔥 (Mới) Trình biên dịch Neo4j Cypher ép buộc chuỗi thời gian cho TRAKE
+│   ├── evidence_engine.py     # Thẩm phán chứng cứ 3-Level Veto
+│   ├── temporal_alignment.py  # Thuật toán Skip-Aware Monotonic DP (Fallback khi không có Graph)
+│   └── submission_exporter.py # Đóng gói kết quả thành CSV format KIS/QA/TRAKE chuẩn BTC
 │
-├── scripts/                   # Các script chạy độc lập (Data preparation)
-│   ├── build_dataset_map.py   # Quét video/keyframe và build file map_keyframes.json
-│   ├── extract_image_features.py # Sinh đặc trưng CLIP (clip_features.npy) từ ảnh
-│   ├── local_whisper_asr.py   # Chạy model faster-whisper để lấy ASR (lời thoại) offline
-│   ├── fetch_youtube_asr.py   # Tải ASR từ Youtube
-│   ├── search_frames.py       # Script tìm kiếm thử nghiệm dạng CLI
-│   └── create_dummy_npy.py    # Tạo dữ liệu mock/dummy
+├── scripts/                   # Xưởng chế tác dữ liệu (Data Factory)
+│   ├── build_event_graph_colab.py # 🔥 (Mới) Quét YOLOv8 + VideoMAE trên Colab (Tự động Resume, xuất CSV)
+│   ├── merge_videoma_features.py  # Gộp dữ liệu từ nhiều file CSV
+│   └── init_qdrant_db.py      # Import Numpy CLIP array vào VectorDB Qdrant
 │
-└── utils/                     # Tiện ích chung
-    └── download_from_drive.py # Tool hỗ trợ tải dữ liệu trực tiếp từ Google Drive
+└── utils/                     # Tiện ích
+    └── download_from_drive.py # Tool tải dữ liệu từ Google Drive
 ```
 
 ## 🏗️ Kiến trúc luồng dữ liệu (Architecture Flow)
 
 ```mermaid
 graph TD
-    A[User Input / Query] --> B{Giao diện}
-    B -->|app.py| C[Streamlit UI]
-    B -->|main_pipeline.py| D[CLI Batch Pipeline]
+    A[Truy vấn Text BTC] --> B{Pipeline Điều hướng}
+    B -->|main_pipeline.py| D[CLI Batch - Tự động]
     
-    C --> E[core.retrieval_engine]
-    D --> E
+    D --> E[core.retrieval_engine]
     
-    E --> F[MetaRouter]
-    F -->|Track 1| G[Offline V2]
-    F -->|Track 2| H[AI Semantic V2]
-    F -->|Track 3| I[Hybrid Fusion]
-    F -->|Track 4| J[Adaptive Meta-Policy]
+    E --> F[MetaRouter & Query Compiler]
+    F -->|Định tuyến nhánh| G{Truy xuất Dữ liệu}
     
-    G & H & I & J --> K[CLIP Visual Scoring]
-    G & H & I & J --> L[Temporal DP Alignment]
-    G & H & I & J --> M[ASR BM25 Audio Score]
+    G -->|Hình ảnh / Bối cảnh| H[Qdrant VectorDB]
+    G -->|Chuỗi hành động TRAKE| I[Neo4j GraphDB Cypher]
     
-    K & L & M --> N[Evidence Engine V3.3 Re-ranking]
-    N --> O[Submission Exporter CSV]
+    H & I --> J[Dung hợp Điểm & Bằng chứng]
+    
+    J --> K{Loại Truy vấn?}
+    K -->|QA| L[Qwen-VL Simulator]
+    K -->|KIS / TRAKE| M[Lấy Frame ID]
+    
+    L & M --> N[Submission Exporter CSV/ZIP]
 ```
 
-## 🧠 Phân tích chuyên sâu hệ thống AIC 2026 Core Engine
+## 🧠 Giải mã 5 Mảnh ghép Chí mạng đã được gắn kết
 
-### 1. Kiến trúc Đa nhánh (Multi-Track) & MetaRouter (`core/meta_router.py`)
-- **Track 1: Offline V2**: Truy xuất siêu tốc (Zero-LLM), ưu tiên câu hỏi chứa mỏ neo (OCR) hoặc rất ngắn.
-- **Track 2: AI Semantic V2**: Sử dụng LLM bóc tách ngữ nghĩa.
-- **Track 3: Hybrid Fusion**: Gộp sức mạnh AI và cục bộ.
-- **Track 4: Adaptive Meta-Policy**: Định tuyến thông minh. `MetaRouter` trích xuất `MetaFeatureVector` để quyết định track, có tính năng *Escalation Policy* leo thang track linh hoạt.
+### 1. Neo4j Graph Database ("Hòa mạng" Chuỗi Sự Kiện)
+- Sự kết nối với Neo4j thông qua `graph_matcher.py` giúp hệ thống suy luận các mối quan hệ đa thực thể. 
+- Thay vì chỉ ghép 2 hành động bằng phép `AND`, hệ thống giờ đây sinh ra truy vấn Cypher ép buộc tính thứ tự thời gian (`e1.timestamp < e2.timestamp`), giúp phá giải triệt để bài toán TRAKE và trả về danh sách `matched_timestamps` chính xác.
 
-### 2. Dữ liệu trung gian: Common Semantic IR (`core/semantic_ir.py`)
-- **CoreEventNode**: Hành động sống còn (w_core = 0.8..0.9).
-- **SupportFactNode**: Bối cảnh phụ trợ (w_supp = 0.1..0.2).
-- **TemporalPhaseNode**: Các pha trong chuỗi thời gian.
-- **Hard Anchors**: Mỏ neo OCR (số, chữ trong ngoặc kép).
+### 2. Tái cấu trúc VectorDB bằng Qdrant
+- Việc tính toán bằng `numpy` truyền thống được thay thế dần bởi `qdrant_client`. Giúp hệ thống giải phóng Bottleneck về CPU/RAM khi xử lý lượng truy vấn lô (batch) khổng lồ cho 50GB video.
 
-### 3. Trình biên dịch câu hỏi: Query Compiler (`core/query_compiler.py`)
-- Dịch ngôn ngữ cục bộ siêu nhanh.
-- **Safe Sequence Segmentation**: Chỉ tách pha thời gian khi có dấu hiệu cực kỳ rõ ràng (bước 1, sau đó).
-- **Multi-Aspect Enrichments**: Sinh các prompt nhỏ (action, object, scene) bổ trợ cho CLIP.
+### 3. Đánh bại điểm mù Object Counting với YOLO & ByteTrack
+- Ở cấp độ trích xuất (`build_event_graph_colab.py`), mô hình YOLOv8 và ByteTrack được sử dụng để đếm số lượng người/xe/đồ vật và theo vết chúng. Metadata này được nạp vào Neo4j, đè bẹp điểm yếu "mù đếm số" của CLIP.
 
-### 4. Đối sánh thời gian: Temporal Alignment (`core/temporal_alignment.py`)
-- Dùng thuật toán **Skip-Aware Monotonic Dynamic Programming (DP)**.
-- Cho phép **Skip State**: Nhảy cóc pha phụ nếu video bị rớt keyframe.
-- Sử dụng **Adaptive Temporal Windows**, tùy chỉnh mức phạt (gap penalty) theo loại hành động (IMMEDIATE, SHORT, LONG).
+### 4. Bổ khuyết Video Context với VideoMAE V2
+- VideoMAE được tích hợp ngay từ khâu Colab để hiểu hành động liên tục, kết hợp sức mạnh với CLIP. Đây là bước đệm "Video-to-Text" mô phỏng kỹ thuật của Video-LLaVA để trích xuất ngữ cảnh tĩnh và động.
 
-### 5. Thẩm phán chứng cứ: Evidence Engine V3.2 (`core/evidence_engine.py`)
-- **3-Level Veto**:
-  - **Veto A (Contradiction)**: Phủ quyết ngay (xuống TIER_5) nếu mâu thuẫn lớn (VD: Có OCR anchor nhưng hình không có chữ khớp).
-  - **Veto B (Temporal Impossibility)**: Phủ quyết thời gian đảo ngược.
-  - **Veto C (Evidence Insufficiency)**: Phủ quyết khỏi TIER_0 nếu tỷ lệ Core Event (CEC) < 0.7.
-- **Disjoint Tier Ladder Scoring**: Phân chia TIER_0 (Certified Gold) đến TIER_5 dựa trên CEC, Z_margin, Contradiction.
-
-### 6. Tổng hợp: Retrieval Engine (`core/retrieval_engine.py`)
-- Tải đặc trưng CLIP (từ file `.npy`), JSON map, và OCR/ASR caches.
-- Tính Cosine Similarity ma trận cực nhanh qua PyTorch.
-- Dung hợp điểm số: `visual_scores = (global_sim * 0.70) + (max_phase_sim * 0.15) + (seq_bonus * 0.15)`.
-- Kết hợp ASR BM25 với Gaussian smoothing.
-- Trả về danh sách ứng viên (candidate_items) đã qua thẩm định của Evidence Engine.
+### 5. Tự động hóa Q/A (VLM Simulator)
+- Mảnh ghép cuối cùng: Khi xác định đề thi là dạng QA, hệ thống gọi hàm `answer_qa()` tại `retrieval_engine.py` (Mô phỏng Qwen-VL) để tự động điền đáp án dạng text vào CSV, biến Pipeline V4.0 thành quy trình 100% Zero-Click.

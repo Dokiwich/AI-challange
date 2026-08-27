@@ -117,8 +117,11 @@ class SubmissionExporter:
             if isinstance(item, dict):
                 video = item.get("video")
                 frames = item.get("frames", [])
+                if not frames:
+                    frames = item.get("matched_timestamps", [])
+                
                 if isinstance(frames, list) and len(frames) > 0 and isinstance(frames[0], dict):
-                    frame_ids = [int(f["frame"]) for f in frames]
+                    frame_ids = [int(f.get("frame", 0)) for f in frames]
                 else:
                     frame_ids = [int(f) for f in frames]
             elif isinstance(item, (list, tuple)):

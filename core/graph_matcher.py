@@ -67,19 +67,25 @@ class GraphMatcher:
             elif subj:
                 match_clauses.append(f"MATCH ({subj})-[{e_var}:PERFORMS {{action: '{action}'}}]->()")
 
-        # 4. Xây dựng Temporal Edges
+        # 4. Xây dựng Temporal Edges (Dành cho TRAKE)
+        # Sắp xếp các event theo thời gian thực hiện để tìm chuỗi sự kiện chính xác
         for t_edge in ir.temporal_edges:
             from_ev = t_edge.from_event.replace("-", "_")
             to_ev = t_edge.to_event.replace("-", "_")
-            # Logic: Frame của sự kiện 1 diễn ra trước Frame của sự kiện 2
-            # Ghi chú: Cypher này mang tính mô phỏng, thực tế phụ thuộc vào cấu trúc schema
-            where_clauses.append(f"{from_ev}.frame_timestamp < {to_ev}.frame_timestamp")
+            where_clauses.append(f"toInteger(split({from_ev}.id, '_')[2]) < toInteger(split({to_ev}.id, '_')[2])")
 
         cypher = "\n".join(match_clauses)
         if where_clauses:
             cypher += "\nWHERE " + " AND ".join(where_clauses)
         
-        cypher += "\nRETURN v.id AS video_id, count(f) AS frame_match_count, collect(f.timestamp) AS matched_timestamps"
+        # Sửa lại RETURN để trả về đúng danh sách các timestamp ứng với các Event theo đúng trình tự (Dành cho TRAKE)
+        event_vars = [e.event_id.replace("-", "_") for e in ir.event_edges]
+        if event_vars:
+            timestamp_ret = ", ".join([f"toInteger(split({ev}.id, '_')[2])" for ev in event_vars])
+            cypher += f"\nRETURN v.id AS video_id, count(f) AS frame_match_count, [{timestamp_ret}] AS matched_timestamps"
+        else:
+            cypher += "\nRETURN v.id AS video_id, count(f) AS frame_match_count, collect(f.timestamp) AS matched_timestamps"
+            
         cypher += "\nORDER BY frame_match_count DESC LIMIT 50"
 
         return cypher

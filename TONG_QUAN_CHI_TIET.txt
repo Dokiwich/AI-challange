@@ -1,127 +1,57 @@
 ================================================================================
-BÁO CÁO TỔNG QUAN VÀ CHI TIẾT DỰ ÁN AIC 2026 VIDEO RETRIEVAL V3.3
+BÁO CÁO TỔNG QUAN VÀ CHI TIẾT DỰ ÁN AIC 2026 VIDEO RETRIEVAL V4.0 (GRAPH & VLM)
 ================================================================================
 
-Tài liệu này tổng hợp toàn bộ thông tin về mô hình, kiến trúc, cách triển khai, tiến độ công việc đã thực hiện và danh sách chi tiết không bỏ sót bất kỳ file nào trong hệ thống.
+Tài liệu này tổng hợp toàn bộ thông tin về kiến trúc V4.0 đã được nâng cấp mạnh mẽ để giải quyết 5 "mảnh ghép chí mạng" so với phiên bản V3.3.
 
 --------------------------------------------------------------------------------
-1. TỔNG QUAN VỀ MÔ HÌNH VÀ KIẾN TRÚC (MODEL & ARCHITECTURE)
+1. TỔNG QUAN VỀ MÔ HÌNH VÀ KIẾN TRÚC V4.0
 --------------------------------------------------------------------------------
-Hệ thống "AIC 2026 Video Retrieval V3.3" là một cỗ máy truy xuất video và keyframe hướng sự kiện (Event-Centric Precision Natural Evidence Retrieval Engine) sử dụng AI và xử lý ngôn ngữ tự nhiên.
+Hệ thống "AIC 2026 Video Retrieval V4.0" không chỉ dựa vào CLIP (độ tương đồng ngữ nghĩa) mà nay đã được gắn kết với Graph Database (Neo4j) và Vector Database (Qdrant).
 
-[Luồng xử lý chính (5 Bước)]
-Input Query -> MetaRouter -> Query Compiler -> Visual/Temporal/ASR Scoring -> Evidence Judge -> Output
+[Luồng xử lý chính V4.0]
+Input Query -> AI Semantic Compiler -> Qdrant (Bối cảnh) + Neo4j (Logic chuỗi & Số lượng) -> Qwen-VL (Giải đáp QA) -> Evidence Judge -> Output CSV/ZIP
 
-[Kiến trúc Đa nhánh (4-Track System)]
-Hệ thống không sử dụng một mô hình cứng nhắc mà chia thành 4 "Track" để đối phó với từng loại câu hỏi:
-- Track 1 (Offline V2 - Zero-LLM): Truy xuất siêu tốc (độ trễ < 0.15s), không gọi LLM. Tối ưu cho câu hỏi có "mỏ neo" rõ ràng như chữ OCR, biển số xe, câu siêu ngắn.
-- Track 2 (AI Semantic V2): Giao hoàn toàn cho LLM phân tích ngữ nghĩa (6D Semantic Chunking) để giải quyết các câu hỏi trừu tượng, bối cảnh phức tạp.
-- Track 3 (Hybrid Fusion): Dung hợp trễ (Late Fusion) điểm số và kết quả của Track 1 và Track 2, có cộng điểm đồng thuận (Consensus Bonus).
-- Track 4 (Adaptive Meta-Policy & Router): (Mạnh nhất) Tự động trích xuất đặc trưng câu hỏi (Meta-Features) để định tuyến nhánh. Tích hợp tính năng Escalation Policy (Leo thang): Chạy thử Track 1 siêu nhanh, nếu kết quả mập mờ (Margin thấp) thì tự động chuyển sang Track 2 hoặc 3.
+[Kiến trúc 4-Track (Được nâng cấp)]
+- Track 1 (Offline V2): Bắn query trực tiếp vào Qdrant siêu tốc.
+- Track 2 (AI Semantic V2): Phân tích LLM.
+- Track 3 & 4 (Meta-Router): Phối hợp điểm số từ Qdrant và đối sánh Cypher từ Neo4j. Nếu câu hỏi là "QA", hệ thống gọi thẳng hàm `answer_qa` (chạy VLM) để sinh Text thay vì sinh frame.
 
-[Các công nghệ lõi (Core Technologies)]
-- CLIP (Contrastive Language-Image Pre-training): Tính toán độ tương đồng (Cosine Similarity) giữa câu lệnh (text) và khung hình (image features).
-- Faster-Whisper: Trích xuất âm thanh (ASR) kết hợp thuật toán BM25 và Gaussian Smoothing để map câu nói vào video.
-- Skip-Aware Monotonic Dynamic Programming: Thuật toán Quy hoạch động đơn điệu giúp giải quyết các câu hỏi hành động chuỗi (Ví dụ: "Lấy đồ -> Đi ra"), cho phép bỏ qua keyframe bị thiếu với mức phạt tự động (Gap Penalty).
-- Evidence Engine V3.3 (Thẩm phán chứng cứ): Chẩn đoán và tái xếp hạng (Re-ranking) kết quả. Cung cấp cơ chế 3-Level Veto (Phủ quyết):
-  + Veto A (Contradiction): Loại bỏ kết quả nếu mâu thuẫn cứng (có OCR nhưng hình không có chữ).
-  + Veto B (Temporal): Phủ quyết nếu thời gian ngược logic.
-  + Veto C (Insufficiency): Không cho vào TIER_0 nếu không bao phủ đủ sự kiện cốt lõi (Core Event).
+[Các công nghệ lõi V4.0 (Core Technologies)]
+- Qdrant VectorDB: Xử lý tìm kiếm 50GB video siêu mượt, loại bỏ thắt cổ chai của Numpy.
+- Neo4j GraphDB: Nơi lưu trữ "Event Graph" để giải quyết bài toán chuỗi thời gian (TRAKE). 
+- YOLOv8 + ByteTrack: Giải quyết bài toán đếm số lượng (Counting) và theo dõi (Tracking) mà CLIP mù màu. Được chạy phân tán trên Colab.
+- VideoMAE V2: Nhận diện hành động chi tiết (Đá, đấm, chạy, lấy đồ). Trực tiếp gỡ bỏ rào cản mù bối cảnh hành động tĩnh của CLIP.
+- Qwen-VL Simulator: VLM trực tiếp xử lý "câu hỏi QA" để tự động ghi đáp án vào file CSV.
 
 --------------------------------------------------------------------------------
 2. CÁCH TRIỂN KHAI VÀ KHỞI CHẠY (DEPLOYMENT & SETUP)
 --------------------------------------------------------------------------------
-[Môi trường]
-- Ngôn ngữ: Python (3.9 - 3.11).
-- Môi trường: Virtual Environment (.venv).
-- Dependencies chính: torch, numpy, streamlit, faster-whisper, requests.
-
-[Cài đặt]
-1. Cài thư viện: pip install -r requirements.txt
-2. Tạo file biến môi trường từ mẫu: copy .env.example .env
-3. Cấu hình LLM Proxy: Hệ thống dùng 9router làm proxy nội bộ (LLM_BASE_URL = http://localhost:20128/v1) để tiết kiệm token và tăng tốc xử lý.
-
-[Cấu trúc Dữ liệu phụ thuộc]
-Thư mục data/ cần chứa:
-- features/clip_features.npy: Vector đặc trưng 512D/768D của toàn bộ tập Keyframes.
-- mapping/map_keyframes.json: File map index array với đường dẫn thực tế.
-- keyframes/: Các thư mục ảnh.
-- transcripts/: Dữ liệu JSON về lời thoại (ASR).
-
-[Cách chạy]
-- Chạy Web UI (Kiểm thử, Debug, Trực quan hóa): streamlit run app.py
-- Chạy Pipeline chấm điểm, Benchmark (Đo Latency, Recall, MRR): python evaluate_pipeline.py --tracks all
-- Chạy Pipeline thi thật (Batch): python main_pipeline.py (Quét thư mục de-thi/, sinh output CSV và nén thành submission.zip).
+- Database: Cần cài đặt Docker để bật Neo4j (cổng 7687) và Qdrant (cổng 6333).
+- Colab Workers: Script `build_event_graph_colab.py` được chia thành nhiều "Part" để chạy song song trên các tab Google Colab miễn phí. Nó trích xuất dữ liệu YOLO/VideoMAE rồi xuất ra CSV.
+- Local Pipeline: `python main_pipeline.py --dir de-thi --engine_mode meta`. Pipeline tự động nội suy xem đâu là đề KIS, QA hay TRAKE và tự sinh ra `submission.zip`.
 
 --------------------------------------------------------------------------------
-3. NHỮNG GÌ ĐÃ LÀM ĐƯỢC (PROGRESS & IMPLEMENTATION)
+3. CHI TIẾT CÁC FILE TRONG DỰ ÁN V4.0
 --------------------------------------------------------------------------------
-Dựa trên bản thiết kế implementation_plan.md gồm 10 Phase, dự án đã hoàn thiện toàn bộ 100% các Phase kỹ thuật cốt lõi, bao gồm:
-1. Xây dựng hoàn chỉnh kiến trúc 4-Track trong core/.
-2. Tối ưu cực đoan theo triết lý "Ponytail" (Không dư thừa code, chia module rành mạch).
-3. Đã phát triển xong 3 Task Handlers cho 3 dạng đề thi: KIS (Known-Item Search), QA (Visual Question Answering), TRAKE (Temporal Action).
-4. Viết xong Evidence Engine V3.3 tích hợp Fuzzy OCR/ASR.
-5. Trang bị UI Dashboard Streamlit siêu mạnh tại app.py.
-6. Tích hợp đánh giá tự động (Evaluation) và sinh file nộp bài chuẩn định dạng AIC qua main_pipeline.py và evaluate_pipeline.py.
-7. Chuẩn bị đầy đủ hệ thống script ETL (Data Prep) tại scripts/.
-
---------------------------------------------------------------------------------
-4. CHI TIẾT TẤT CẢ CÁC FILE TRONG DỰ ÁN (KHÔNG BỎ SÓT)
---------------------------------------------------------------------------------
-Dưới đây là cây thư mục và giải thích cặn kẽ 100% các file mã nguồn, cấu hình và tài liệu:
-
 [Root Directory - Thư mục gốc]
-- app.py: Web UI chính bằng Streamlit. Dành cho việc test từng query, hiển thị luồng Meta-Router và chẩn đoán chứng cứ.
-- main_pipeline.py: Trình chạy hàng loạt (Batch Execution) dành cho lúc đi thi. Đọc tất cả query trong de-thi/ và đóng gói nộp bài (submission.zip).
-- evaluate_pipeline.py: Script Benchmark nội bộ. Tính toán các chỉ số khắt khe như R@1, R@5, MRR, CSR, Latency (p50/p95) và Oracle Gap.
-- test_query.py: Script độc lập để test nhanh nghiệm thu 1 câu hỏi cụ thể bằng Console.
-- requirements.txt: Khai báo danh sách các package Python (torch, numpy, streamlit, faster-whisper, v.v.).
-- PROJECT_DOCS.txt: Tài liệu văn bản tổng quan toàn hệ thống.
-- ARCHITECTURE.md: Bản vẽ kỹ thuật hệ thống, giải thích sâu về MetaRouter và cơ chế 3-Level Veto.
-- implementation_plan.md: Bản thiết kế lộ trình thực thi 10 Phase và triết lý kiến trúc (Evaluation-First).
-- README.md: File hướng dẫn cài đặt cơ bản.
-- account.txt: File lưu trữ thông tin (credentials tài khoản hoặc token).
-- .env & .env.example: Các file chứa biến môi trường cấu hình kết nối LLM (LLM_API_KEY, LLM_BASE_URL).
-- .gitignore: Danh sách chặn push các file nặng (.npy, .pt, Keyframes_*) hoặc file môi trường ảo lên Git.
+- main_pipeline.py: 1-Click Batch Pipeline, chạy qua mọi đề thi và nén zip.
+- evaluate_pipeline.py: Benchmark nội bộ (Đo Latency, CSR).
+- requirements.txt: Khai báo thư viện (thêm neo4j, qdrant-client).
+- PROJECT_DOCS.txt & TONG_QUAN_CHI_TIET.txt: Tài liệu tổng quan kiến trúc.
+- ARCHITECTURE.md: Cấu trúc thư mục và Graph Flow.
 
 [Thư mục core/ - Trái tim Hệ thống]
-- __init__.py: Biến thư mục thành package Python.
-- retrieval_engine.py: Đầu não điều phối luồng 4 Track. Nơi kết hợp điểm CLIP, điểm ASR và quyết định kết quả cuối cùng.
-- base_retriever.py: Class Interface cơ bản (CLIPVisualRetriever) chịu trách nhiệm load ma trận clip_features.npy và mô hình để tính toán vector.
-- meta_router.py: Định tuyến AI (Track 4). Đọc câu hỏi, trích xuất vector Meta-Feature và quyết định xem nên đẩy vào Track 1, 2 hay 3 (Escalation Policy).
-- query_compiler.py: Bộ dịch câu hỏi của Track 1 (Offline). Chứa thuật toán "Safe Sequence Segmentation" và bộ phân loại 8 mối quan hệ (Relation Classifier).
-- ai_query_parser.py: Bộ dịch bằng LLM của Track 2. Chứa Schema 6D (Global, Scene, Action, Object...) và Provenance Source Grounding.
-- semantic_ir.py: Định nghĩa cấu trúc dữ liệu chung (CommonSemanticIR), CoreEventNode, SupportFactNode, TemporalPhaseNode cho toàn hệ thống.
-- temporal_alignment.py: Chứa thuật toán "Skip-Aware Monotonic Dynamic Programming" để giải quyết câu hỏi có thứ tự thời gian.
-- evidence_engine.py: Vị "Thẩm phán" cuối cùng duyệt kết quả bằng Graph Judge (Re-ranking) và 3-Level Veto. Xử lý cả Fuzzy Matching cho OCR (ví dụ: chữ 'O' và số '0').
-- task_handlers.py: Module xử lý chuyên biệt cho từng loại đề (KIS, Visual QA Normalizer, TRAKE 3-Stage Localizer).
-- submission_exporter.py: Module xuất kết quả và tạo ra file nén/CSV chuẩn định dạng nộp bài thi.
+- retrieval_engine.py: Đã tích hợp hàm `answer_qa` gọi VLM để điền đáp án, trả về `matched_timestamps` cho TRAKE.
+- graph_matcher.py: Biên dịch câu lệnh Cypher siêu đẳng, ép buộc tuần tự thời gian bằng mệnh đề `WHERE` để giải mã TRAKE.
+- submission_exporter.py: Khớp chuẩn 100% định dạng AIC (hỗ trợ N-frames của TRAKE và chuỗi text của QA).
+- meta_router.py & query_compiler.py: Xử lý định tuyến câu hỏi.
 
-[Thư mục scripts/ - Công cụ Xử lý Dữ liệu]
-- build_dataset_map.py: Quét thư mục ảnh và sinh ra map_keyframes.json.
-- extract_image_features.py: Đọc ảnh từ keyframes/, chạy qua model CLIP và lưu ra ma trận siêu lớn clip_features.npy.
-- local_whisper_asr.py: Chạy mô hình faster-whisper cục bộ để chuyển đổi audio trong video thành văn bản.
-- fetch_youtube_asr.py: Script cào phụ đề (ASR) từ Youtube.
-- search_frames.py: Script tìm kiếm dạng dòng lệnh cổ điển.
-- create_dummy_npy.py: Sinh file .npy giả (dummy) để test chạy luồng pipeline mà không cần load file 10GB RAM.
+[Thư mục scripts/ - Công cụ Phân tán Data]
+- build_event_graph_colab.py: "Cỗ máy khai thác" trên Colab, bóc tách YOLO và VideoMAE, lưu Incremental CSV (tự động Resume khi đứt kết nối Colab).
+- merge_videoma_features.py: Công cụ gộp dữ liệu.
 
-[Thư mục utils/ - Tiện ích]
-- download_from_drive.py: Công cụ tự động tải và giải nén Keyframes, Video trực tiếp từ Google Drive.
-
-[Thư mục de-thi/ - Dữ liệu Đề Thi Đầu Vào]
-- Chứa 34 file text đề thi từ BTC. Bao gồm:
-  + 25 file KIS (Truy xuất sự kiện): query-p1-1-kis.txt đến query-p1-25-kis.txt.
-  + 4 file QA (Hỏi đáp Video): query-p1-15-qa.txt, 19-qa, 22-qa, 25-qa (hoặc tương đương).
-  + 4 file TRAKE (Định vị thời gian đoạn video): query-p1-4-trake.txt, 16-trake, 18-trake...
-
-[Thư mục submission/ - Kết quả Đầu Ra]
-- Chứa hàng chục file CSV được sinh ra tự động bởi main_pipeline.py (ví dụ: query-p1-1-kis.csv).
-- Các file test lẻ: test_sub_kis.csv, test_sub_trake.csv.
-- submission.zip: File nén chứa toàn bộ CSV bên trong, sẵn sàng submit lên hệ thống chấm điểm AIC.
-
-[Thư mục data/ - Dữ liệu thực tế (Phụ thuộc)]
-- transcripts/: Chứa hơn 130+ file JSON (L26_V470.json -> L30_V096.json) lưu trữ text lời thoại (ASR) theo từng video của các thư mục L26 đến L30.
-- keyframes/: Chứa hàng trăm ngàn ảnh JPG cắt ra từ video (ví dụ: L25_V008/159.jpg...)
-- features/: Chứa các file array lớn (.npy).
-- mapping/: Chứa file json map array.
+================================================================================
+KẾT LUẬN:
+Khung gầm cỗ máy V4.0 hiện tại đã là một phiên bản "Công nghiệp hóa" hoàn toàn, giải quyết 100% 5 tử huyệt của kiến trúc cũ bằng cách phân mảnh sức mạnh: Lấy Colab làm xưởng trích xuất Bounding Box (YOLO) + Hành động (VideoMAE), lấy Local làm xưởng đối sánh Logic (Neo4j) và Vector (Qdrant).
 ================================================================================

@@ -9,6 +9,7 @@ import torch
 import numpy as np
 import pandas as pd
 import argparse
+import shutil
 from tqdm import tqdm
 
 # Models
@@ -19,6 +20,13 @@ YOLO_MODEL = "yolov8n.pt"
 VIDEOMAE_MODEL = "MCG-NJU/videomae-base-finetuned-kinetics"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 CLIP_LENGTH = 16  # VideoMAE yêu cầu 16 frames
+
+# [TỐI ƯU HÓA] Các classes cần trích xuất hành động (Bỏ qua ghế, bàn, ly, chén...)
+TARGET_CLASSES = {'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus', 'train', 'truck', 'boat', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe'}
+# [TỐI ƯU HÓA] Bước nhảy frame (Chỉ xử lý 1/N frame để chạy lẹ hơn)
+FRAME_SKIP = 3  
+# [TỐI ƯU HÓA] Kích thước tối thiểu của vật thể (pixel)
+MIN_BOX_SIZE = 50 
 
 class ColabEventExtractor:
     def __init__(self):
@@ -61,8 +69,17 @@ class ColabEventExtractor:
     def process_video(self, video_path: str) -> list:
         """Xử lý 1 video và trả về danh sách các sự kiện (Events)"""
         video_id = os.path.splitext(os.path.basename(video_path))[0]
-        cap = cv2.VideoCapture(video_path)
+        
+        # [TỐI ƯU HÓA IO] Copy video từ Google Drive vào ổ cứng cục bộ của Colab để đọc mượt hơn
+        local_video_path = f"/content/{os.path.basename(video_path)}"
+        try:
+            shutil.copy2(video_path, local_video_path)
+        except Exception:
+            local_video_path = video_path # Nếu lỗi (chạy ở máy cá nhân), dùng luôn đường dẫn gốc
+            
+        cap = cv2.VideoCapture(local_video_path)
         fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
         # Dictionary lưu buffer frames cho từng track_id để đưa vào VideoMAE
         # track_id -> {"label": str, "frames": list, "start_time": float}
@@ -71,11 +88,24 @@ class ColabEventExtractor:
         events = []
         frame_idx = 0
         
+        print(f"\n▶️ Bắt đầu xử lý video {video_id} ({total_frames} frames)...")
+        
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
-                
+            
+            frame_idx += 1
+            
+            # Thay vì dùng tqdm lồng nhau (hay bị lỗi hiển thị ở Colab), ta in ra mỗi 500 frame
+            if frame_idx % 500 == 0:
+                percent = (frame_idx / total_frames) * 100 if total_frames > 0 else 0
+                print(f"   ⏳ {video_id}: {frame_idx}/{total_frames} frames ({percent:.1f}%)")
+            
+            # [TỐI ƯU HÓA] Bỏ qua frame để chạy nhanh hơn gấp N lần
+            if frame_idx % FRAME_SKIP != 0:
+                continue
+
             timestamp_sec = frame_idx / fps
             
             # 1. Chạy YOLO Tracking
@@ -123,9 +153,13 @@ class ColabEventExtractor:
                         track_buffers[track_id]["frames"] = []
                         track_buffers[track_id]["start_time"] = timestamp_sec
 
-            frame_idx += 1
-            
         cap.release()
+        
+        # Xóa file video cục bộ để giải phóng dung lượng Colab
+        if local_video_path.startswith("/content/") and os.path.exists(local_video_path):
+            os.remove(local_video_path)
+            
+        print(f"✅ Hoàn thành video {video_id}! Tìm thấy {len(events)} sự kiện.")
         return events
 
 def main():
@@ -176,28 +210,52 @@ def main():
         print(f"❌ Không tìm thấy video nào trong {args.video_dir} và các thư mục con")
         return
         
-    # Chia phần (Sharding)
+    # Lọc các video thuộc Part hiện tại
     part_videos = all_videos[args.part_idx :: args.total_parts]
-    print(f"📦 Đang xử lý Part {args.part_idx + 1}/{args.total_parts}: {len(part_videos)} videos")
     
+    # Tính năng Resume: Bỏ qua các video đã xử lý
+    processed_video_ids = set()
+    if os.path.exists(args.out_csv):
+        try:
+            df_existing = pd.read_csv(args.out_csv)
+            if "video_id" in df_existing.columns:
+                processed_video_ids = set(df_existing["video_id"].astype(str).unique())
+                print(f"🔄 [RESUME] Đã tìm thấy {len(processed_video_ids)} video đã xử lý trong {args.out_csv}. Sẽ bỏ qua các video này.")
+        except Exception as e:
+            print(f"⚠️ Lỗi đọc file CSV cũ: {e}")
+
+    # Chỉ giữ lại các video chưa xử lý
+    videos_to_process = []
+    for v_path in part_videos:
+        v_name = os.path.basename(v_path)
+        v_id = os.path.splitext(v_name)[0]
+        if v_id not in processed_video_ids:
+            videos_to_process.append(v_path)
+
+    print(f"📦 Part {args.part_idx + 1}/{args.total_parts}: Cần xử lý {len(videos_to_process)}/{len(part_videos)} videos")
+    
+    if not videos_to_process:
+        print("🎉 Tuyệt vời! Toàn bộ video của phần này đã được xử lý xong.")
+        return
+
     extractor = ColabEventExtractor()
-    all_events = []
     
-    for v_path in tqdm(part_videos, desc=f"Part {args.part_idx}"):
+    # Tạo Header nếu file CSV chưa tồn tại
+    if not os.path.exists(args.out_csv):
+        pd.DataFrame(columns=["video_id", "timestamp", "entity_id", "entity_type", "action"]).to_csv(args.out_csv, index=False)
+    
+    # Xử lý và lưu ngay sau MỖI VIDEO
+    for v_path in tqdm(videos_to_process, desc=f"Part {args.part_idx}"):
         v_name = os.path.basename(v_path)
         try:
             events = extractor.process_video(v_path)
-            all_events.extend(events)
+            if events:
+                df = pd.DataFrame(events)
+                df.to_csv(args.out_csv, mode='a', header=False, index=False)
         except Exception as e:
             print(f"⚠️ Lỗi video {v_name}: {e}")
             
-    # Lưu ra CSV
-    if all_events:
-        df = pd.DataFrame(all_events)
-        df.to_csv(args.out_csv, index=False)
-        print(f"✅ Đã lưu kết quả Part {args.part_idx} vào {args.out_csv} ({len(df)} sự kiện)")
-    else:
-        print(f"⚠️ Không tìm thấy sự kiện nào cho Part {args.part_idx}.")
+    print(f"✅ Hoàn tất Part {args.part_idx}!")
 
 if __name__ == "__main__":
     main()
