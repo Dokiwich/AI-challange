@@ -15,7 +15,8 @@ from deep_translator import GoogleTranslator
 from core.ai_query_parser import AIQueryParser
 from core.semantic_ir import (
     CommonSemanticIR, CoreEventNode, SupportFactNode,
-    AspectPromptNode, TemporalPhaseNode, ConstraintNode
+    AspectPromptNode, TemporalPhaseNode, ConstraintNode,
+    EntityNode, EventEdge, TemporalEdge
 )
 
 logger = logging.getLogger(__name__)
@@ -251,6 +252,37 @@ class QueryCompiler:
                     is_hard=c.get("is_hard", True)
                 ))
 
+        entities = []
+        for e in ai_data.get("entities", []):
+            if isinstance(e, dict):
+                entities.append(EntityNode(
+                    entity_id=e.get("entity_id", ""),
+                    entity_type=e.get("type", "unknown"),
+                    attributes=e.get("attributes", {}),
+                    count=e.get("count", 1),
+                    is_hard_constraint=e.get("is_hard_constraint", True)
+                ))
+
+        event_edges = []
+        for ev in ai_data.get("events", []):
+            if isinstance(ev, dict):
+                event_edges.append(EventEdge(
+                    event_id=ev.get("event_id", ""),
+                    action=ev.get("action", ""),
+                    subject_id=ev.get("subject", ""),
+                    object_id=ev.get("object"),
+                    phase_index=ev.get("phase_index", 1)
+                ))
+
+        temporal_edges = []
+        for te in ai_data.get("temporal_edges", []):
+            if isinstance(te, dict):
+                temporal_edges.append(TemporalEdge(
+                    from_event=te.get("from", ""),
+                    to_event=te.get("to", ""),
+                    relation=te.get("relation", "BEFORE")
+                ))
+
         return CommonSemanticIR(
             query_id=filename or "ai_query",
             task_type=ai_data.get("task_type", "KIS"),
@@ -260,6 +292,9 @@ class QueryCompiler:
             compiler_confidence={"offline_raw": 0.0, "ai_raw": 0.95, "calibrated_offline": 0.0, "calibrated_ai": 0.95},
             is_sequence=bool(ai_data.get("is_sequence", len(phase_nodes) > 1)),
             event_density=float(len(core_events) / max(1.0, float(len(phase_nodes)))),
+            entities=entities,
+            event_edges=event_edges,
+            temporal_edges=temporal_edges,
             core_events=core_events,
             support_facts=[],
             aspects=aspect_node,
@@ -298,6 +333,9 @@ class QueryCompiler:
             },
             is_sequence=ai_ir.is_sequence or offline_ir.is_sequence,
             event_density=ai_ir.event_density or offline_ir.event_density,
+            entities=ai_ir.entities if ai_ir.entities else offline_ir.entities,
+            event_edges=ai_ir.event_edges if ai_ir.event_edges else offline_ir.event_edges,
+            temporal_edges=ai_ir.temporal_edges if ai_ir.temporal_edges else offline_ir.temporal_edges,
             core_events=merged_core_events,
             support_facts=[],
             aspects=ai_ir.aspects if ai_ir.aspects.global_prompt else offline_ir.aspects,
@@ -329,6 +367,30 @@ class QueryCompiler:
             "speech_keywords": ir.speech_keywords,
             "phases_en": phases_en,
             "aspect_prompts": aspect_dict,
+            "entities": [
+                {
+                    "entity_id": e.entity_id,
+                    "type": e.entity_type,
+                    "attributes": e.attributes,
+                    "count": e.count
+                } for e in ir.entities
+            ],
+            "events": [
+                {
+                    "event_id": ev.event_id,
+                    "action": ev.action,
+                    "subject": ev.subject_id,
+                    "object": ev.object_id,
+                    "phase_index": ev.phase_index
+                } for ev in ir.event_edges
+            ],
+            "temporal_edges": [
+                {
+                    "from": te.from_event,
+                    "to": te.to_event,
+                    "relation": te.relation
+                } for te in ir.temporal_edges
+            ],
             "constraints": [
                 {
                     "type": c.constraint_type,

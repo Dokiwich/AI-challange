@@ -7,6 +7,8 @@ from PIL import Image
 
 from core.retrieval_engine import RetrievalEngine
 from core.submission_exporter import SubmissionExporter
+from qdrant_client import QdrantClient
+from neo4j import GraphDatabase
 
 st.set_page_config(page_title="AIC 2026 Video Retrieval", layout="wide", initial_sidebar_state="expanded")
 
@@ -18,7 +20,19 @@ if st.session_state.get("_engine_ver") != _ENGINE_VERSION:
 
 @st.cache_resource(show_spinner="Loading CLIP model and 4-Track Vector Database...")
 def get_engine(version=_ENGINE_VERSION):
-    return RetrievalEngine()
+    try:
+        qclient = QdrantClient("localhost", port=6333)
+        qclient.get_collections()
+    except Exception:
+        qclient = None
+        
+    try:
+        ndriver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+        ndriver.verify_connectivity()
+    except Exception:
+        ndriver = None
+        
+    return RetrievalEngine(qdrant_client=qclient, neo4j_driver=ndriver)
 
 engine = get_engine()
 exporter = SubmissionExporter()

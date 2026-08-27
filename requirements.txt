@@ -13,3 +13,9 @@ gdown
 python-dotenv
 rank_bm25
 faster-whisper
+ultralytics
+neo4j
+qdrant-client
+opencv-python
+transformers
+decord

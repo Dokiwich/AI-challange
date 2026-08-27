@@ -12,6 +12,28 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Tuple, Optional
 
 @dataclass
+class EntityNode:
+    entity_id: str
+    entity_type: str = "person"
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    count: int = 1
+    is_hard_constraint: bool = True
+
+@dataclass
+class EventEdge:
+    event_id: str
+    action: str
+    subject_id: str
+    object_id: Optional[str] = None
+    phase_index: int = 1
+
+@dataclass
+class TemporalEdge:
+    from_event: str
+    to_event: str
+    relation: str = "BEFORE"
+
+@dataclass
 class CoreEventNode:
     event_id: str
     action_verb: str
@@ -72,6 +94,9 @@ class CommonSemanticIR:
     })
     is_sequence: bool = False
     event_density: float = 0.0  # D_event
+    entities: List[EntityNode] = field(default_factory=list)
+    event_edges: List[EventEdge] = field(default_factory=list)
+    temporal_edges: List[TemporalEdge] = field(default_factory=list)
     core_events: List[CoreEventNode] = field(default_factory=list)
     support_facts: List[SupportFactNode] = field(default_factory=list)
     aspects: AspectPromptNode = field(default_factory=AspectPromptNode)
@@ -91,6 +116,30 @@ class CommonSemanticIR:
             "compiler_confidence": self.compiler_confidence,
             "is_sequence": self.is_sequence,
             "event_density": self.event_density,
+            "entities": [
+                {
+                    "entity_id": e.entity_id,
+                    "type": e.entity_type,
+                    "attributes": e.attributes,
+                    "count": e.count
+                } for e in self.entities
+            ],
+            "event_edges": [
+                {
+                    "event_id": ev.event_id,
+                    "action": ev.action,
+                    "subject": ev.subject_id,
+                    "object": ev.object_id,
+                    "phase_index": ev.phase_index
+                } for ev in self.event_edges
+            ],
+            "temporal_edges": [
+                {
+                    "from": te.from_event,
+                    "to": te.to_event,
+                    "relation": te.relation
+                } for te in self.temporal_edges
+            ],
             "core_events": [
                 {
                     "event_id": e.event_id,

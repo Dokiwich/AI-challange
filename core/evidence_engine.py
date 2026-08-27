@@ -106,6 +106,7 @@ class EvidenceEngine:
         seq_norm = float(item.get("seq_norm", 0.0))
         asr_norm = float(item.get("asr_norm", 0.0))
         has_anchor_match = bool(item.get("has_anchor_match", False))
+        graph_score = float(item.get("graph_score", 0.0))
 
         # 1. Tính toán Core Event Coverage (CEC)
         # Nếu là query chuỗi: CEC phụ thuộc trực tiếp vào seq_norm và action_norm
@@ -114,6 +115,10 @@ class EvidenceEngine:
         else:
             cec = float(item.get("cec", (visual_norm * 0.5 + action_norm * 0.5)))
         cec = float(np.clip(cec, 0.0, 1.0))
+
+        # Graph score boosts CEC
+        if graph_score > 0:
+            cec = float(np.clip(cec + (graph_score * 0.3), 0.0, 1.0))
 
         # 2. Đánh giá Mâu thuẫn (Contradiction Score)
         # Ví dụ: Có anchor nhưng không khớp, hoặc chuỗi thời gian bị đứt gãy
@@ -173,7 +178,8 @@ class EvidenceEngine:
             "z_margin": z_margin,
             "has_anchor_match": has_anchor_match,
             "veto_a": veto_a_triggered,
-            "veto_c": veto_c_locked_tier0
+            "veto_c": veto_c_locked_tier0,
+            "graph_score": graph_score
         }
         return evidence_vec
 
@@ -203,9 +209,10 @@ class EvidenceEngine:
         if is_seq_query:
             continuous_score = (
                 0.20 * ev["visual_norm"] +
-                0.35 * ev["action_norm"] +
+                0.30 * ev["action_norm"] +
                 0.15 * ev["object_norm"] +
-                0.30 * ev["seq_norm"] +
+                0.25 * ev["seq_norm"] +
+                0.10 * ev["graph_score"] +
                 (0.20 * ev["asr_norm"] if has_speech else 0.0) +
                 consensus_bonus -
                 (0.50 * ev["contradiction_score"])
@@ -213,9 +220,10 @@ class EvidenceEngine:
         else:
             continuous_score = (
                 0.35 * ev["visual_norm"] +
-                0.25 * ev["action_norm"] +
-                0.25 * ev["object_norm"] +
+                0.20 * ev["action_norm"] +
+                0.20 * ev["object_norm"] +
                 0.15 * ev["relation_norm"] +
+                0.10 * ev["graph_score"] +
                 (0.30 * ev["asr_norm"] if has_speech else 0.0) +
                 consensus_bonus -
                 (0.50 * ev["contradiction_score"])
@@ -224,6 +232,9 @@ class EvidenceEngine:
         # 1. TIÊU CHUẨN VÀNG TIER_0 (Certified Gold Target)
         # Bắt buộc: KHÔNG bị Veto C + CEC >= 0.80 + Contradiction cực thấp + Margin đủ tốt
         if not ev["veto_c"] and ev["cec"] >= 0.80 and ev["contradiction_score"] <= 0.10:
+            # Nếu có graph_score cao, auto Tier 0
+            if ev["graph_score"] >= 0.5:
+                return "TIER_0", continuous_score + 1.5, is_ambiguous
             if has_ocr and ev["has_anchor_match"] and ev["visual_norm"] >= 0.45:
                 return "TIER_0", continuous_score + 1.0, is_ambiguous
             if is_seq_query and ev["seq_norm"] >= 0.65 and ev["action_norm"] >= 0.50:
@@ -301,6 +312,7 @@ class EvidenceEngine:
                 "core_event_coverage": round(ev["cec"], 2),
                 "action_match": round(ev["action_norm"], 2),
                 "temporal_sequence": round(ev["seq_norm"], 2),
+                "graph_score": round(ev["graph_score"], 2),
                 "contradiction": round(ev["contradiction_score"], 2),
                 "z_margin": round(z_margin, 3),
                 "veto_c_locked": ev["veto_c"],

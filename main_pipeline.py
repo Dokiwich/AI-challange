@@ -88,7 +88,21 @@ def main():
     print(f"🚀 KHỞI ĐỘNG AIC 2026 RETRIEVAL PIPELINE (Track: {args.engine_mode.upper()})")
     print("=" * 60)
 
-    engine = RetrievalEngine()
+    try:
+        from qdrant_client import QdrantClient
+        qclient = QdrantClient("localhost", port=6333)
+        qclient.get_collections()
+    except Exception:
+        qclient = None
+
+    try:
+        from neo4j import GraphDatabase
+        ndriver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+        ndriver.verify_connectivity()
+    except Exception:
+        ndriver = None
+
+    engine = RetrievalEngine(qdrant_client=qclient, neo4j_driver=ndriver)
     exporter = SubmissionExporter()
 
     if args.query:

@@ -237,7 +237,21 @@ def main():
     queries = load_competition_queries(args.de_thi_dir)
     print(f"[Evaluator] Loaded {len(queries)} competition queries from '{args.de_thi_dir}'.")
 
-    engine = RetrievalEngine()
+    try:
+        from qdrant_client import QdrantClient
+        qclient = QdrantClient("localhost", port=6333)
+        qclient.get_collections()
+    except Exception:
+        qclient = None
+
+    try:
+        from neo4j import GraphDatabase
+        ndriver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+        ndriver.verify_connectivity()
+    except Exception:
+        ndriver = None
+
+    engine = RetrievalEngine(qdrant_client=qclient, neo4j_driver=ndriver)
 
     if args.tracks == "all":
         r1 = run_track_evaluation(engine, queries, "offline")

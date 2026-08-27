@@ -24,6 +24,8 @@ from core.evidence_engine import EvidenceEngine
 from core.meta_router import MetaRouter, MetaFeatureVector
 from core.task_handlers import QAnswerNormalizer, TRAKE3StageLocalizer
 from core.semantic_ir import CommonSemanticIR
+from core.graph_matcher import GraphMatcher
+from core.semantic_ir import CommonSemanticIR
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +41,9 @@ class RetrievalEngine:
         ocr_path: str = "data/ocr/ocr_results.json",
         asr_cache_path: str = "data/cache/asr_bm25_cache.pkl",
         model_name: str = "ViT-L/14",
-        device: Optional[str] = None
+        device: Optional[str] = None,
+        qdrant_client = None,
+        neo4j_driver = None
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"[RetrievalEngine] Device: {self.device}")
@@ -52,14 +56,35 @@ class RetrievalEngine:
         self.meta_router = MetaRouter()
         self.trake_localizer = TRAKE3StageLocalizer(self.temporal_engine, image_resolver=self.get_image_path)
         self.qa_normalizer = QAnswerNormalizer()
+        
+        # Tích hợp Neo4j Graph Matcher
+        self.neo4j_driver = neo4j_driver
+        self.graph_matcher = GraphMatcher(neo4j_driver=neo4j_driver)
+        
+        # Tích hợp Qdrant Vector DB
+        self.qdrant_client = qdrant_client
 
-        if not os.path.exists(features_path):
-            raise FileNotFoundError(f"Not found: {features_path}")
-        print(f"[RetrievalEngine] Loading features from '{features_path}'...")
-        raw_features = np.load(features_path)
-        self.image_features = torch.from_numpy(raw_features).to(self.device).float()
-        self.image_features /= self.image_features.norm(dim=-1, keepdim=True)
-        print(f"[RetrievalEngine] {self.image_features.shape[0]} vectors (dim={self.image_features.shape[1]})")
+        # Nạp đặc trưng VideoMA (Motion Features)
+        videoma_path = "data/features/videoma_merged.npy"
+        if os.path.exists(videoma_path):
+            print(f"[RetrievalEngine] Loading VideoMA features from '{videoma_path}'...")
+            self.videoma_features = np.load(videoma_path, allow_pickle=True).item()
+            print(f"[RetrievalEngine] Loaded VideoMA features for {len(self.videoma_features)} videos.")
+        else:
+            self.videoma_features = {}
+
+
+        if self.qdrant_client:
+            print("[RetrievalEngine] Using Qdrant for Vector Search. Skipping in-memory CLIP load.")
+            self.image_features = None
+        else:
+            if not os.path.exists(features_path):
+                raise FileNotFoundError(f"Not found: {features_path}")
+            print(f"[RetrievalEngine] Loading features from '{features_path}'...")
+            raw_features = np.load(features_path)
+            self.image_features = torch.from_numpy(raw_features).to(self.device).float()
+            self.image_features /= self.image_features.norm(dim=-1, keepdim=True)
+            print(f"[RetrievalEngine] {self.image_features.shape[0]} vectors (dim={self.image_features.shape[1]})")
 
         if not os.path.exists(map_path):
             raise FileNotFoundError(f"Not found: {map_path}")
@@ -207,7 +232,7 @@ class RetrievalEngine:
         """
         Tìm kiếm hợp nhất 4 Track chuẩn V3.3 với Direct Cosine Similarity và Evidence Judge.
         """
-        N = self.image_features.shape[0]
+        N = self.image_features.shape[0] if self.image_features is not None else len(self.keyframe_map)
         if not raw_query.strip():
             return [], "", {}
 
@@ -250,7 +275,18 @@ class RetrievalEngine:
         # 5. Direct Cosine Visual Scoring (Trục chính xác số 1)
         global_text = aspect_prompts.get("global", query_en)
         global_feat = self.visual_retriever.encode_text([global_text])
-        global_sim = self.visual_retriever.compute_similarity(global_feat, self.image_features)[0]
+        
+        global_sim = np.zeros(N, dtype=np.float32)
+        if self.qdrant_client:
+            q_res = self.qdrant_client.search(
+                collection_name="aic_clip_frames",
+                query_vector=global_feat[0].cpu().numpy().tolist(),
+                limit=15000
+            )
+            for hit in q_res:
+                global_sim[hit.id] = hit.score
+        else:
+            global_sim = self.visual_retriever.compute_similarity(global_feat, self.image_features)[0]
 
         is_multi_phase = len(phases_en) > 1 and intent_flags.get("is_sequence", False)
         seq_bonus = np.zeros(N, dtype=np.float32)
@@ -259,7 +295,19 @@ class RetrievalEngine:
         if is_multi_phase:
             print(f"[Search] Multi-phase Event Mode: {len(phases_en)} phases ({active_track.upper()})")
             phase_feats = self.visual_retriever.encode_text(phases_en)
-            phase_sims = self.visual_retriever.compute_similarity(phase_feats, self.image_features)
+            
+            phase_sims = np.zeros((len(phases_en), N), dtype=np.float32)
+            if self.qdrant_client:
+                for p_i, p_feat in enumerate(phase_feats):
+                    q_res = self.qdrant_client.search(
+                        collection_name="aic_clip_frames",
+                        query_vector=p_feat.cpu().numpy().tolist(),
+                        limit=10000
+                    )
+                    for hit in q_res:
+                        phase_sims[p_i, hit.id] = hit.score
+            else:
+                phase_sims = self.visual_retriever.compute_similarity(phase_feats, self.image_features)
 
             # Lấy Union Candidates từ Top frames của từng pha + Top Global
             candidate_videos = set()
@@ -321,7 +369,20 @@ class RetrievalEngine:
 
             if len(prompt_list) > 1:
                 p_feats = self.visual_retriever.encode_text(prompt_list)
-                p_sims = self.visual_retriever.compute_similarity(p_feats, self.image_features)
+                
+                p_sims = np.zeros((len(prompt_list), N), dtype=np.float32)
+                if self.qdrant_client:
+                    for p_i, p_feat in enumerate(p_feats):
+                        q_res = self.qdrant_client.search(
+                            collection_name="aic_clip_frames",
+                            query_vector=p_feat.cpu().numpy().tolist(),
+                            limit=10000
+                        )
+                        for hit in q_res:
+                            p_sims[p_i, hit.id] = hit.score
+                else:
+                    p_sims = self.visual_retriever.compute_similarity(p_feats, self.image_features)
+                    
                 aspect_max = np.max(p_sims[1:], axis=0)
                 visual_scores = (global_sim * 0.80) + (aspect_max * 0.20)
             else:
@@ -405,6 +466,35 @@ class RetrievalEngine:
         seq_norm_arr = self.evidence_engine.calibrate_percentile(seq_bonus) if seq_bonus.max() > 0 else seq_bonus
         audio_norm_arr = self.evidence_engine.calibrate_percentile(audio_scores) if audio_scores.max() > 0 else audio_scores
 
+        # 11. Graph Verification (Neo4j Alignment)
+        unique_candidate_videos = set()
+        for idx in top_candidate_indices:
+            idx = int(idx)
+            v_name = self.keyframe_map[idx].get("video") or self.keyframe_map[idx].get("video_name")
+            if v_name:
+                unique_candidate_videos.add(v_name)
+        
+        graph_results = {}
+        if sem_ir and hasattr(sem_ir, "entities"):
+            graph_results = self.graph_matcher.execute_alignment(sem_ir, list(unique_candidate_videos))
+
+        # 11.5 VideoMA PRF Motion Clustering
+        top_5_videos = []
+        for idx in top_candidate_indices:
+            idx = int(idx)
+            v_name = self.keyframe_map[idx].get("video") or self.keyframe_map[idx].get("video_name")
+            if v_name and v_name in self.videoma_features and v_name not in top_5_videos:
+                top_5_videos.append(v_name)
+            if len(top_5_videos) == 5:
+                break
+        
+        motion_centroid = None
+        if top_5_videos and len(self.videoma_features) > 0:
+            centroid_vecs = [self.videoma_features[v] for v in top_5_videos]
+            centroid_vecs = np.array(centroid_vecs)
+            motion_centroid = np.mean(centroid_vecs, axis=0)
+            motion_centroid = motion_centroid / (np.linalg.norm(motion_centroid) + 1e-9)
+
         candidate_items = []
         for idx in top_candidate_indices:
             idx = int(idx)
@@ -417,6 +507,19 @@ class RetrievalEngine:
             img_path = self.get_image_path(v_name, kf_id, real_frame)
 
             consensus_bonus = 0.05 if active_track == "hybrid" and visual_norm_arr[idx] >= 0.8 else 0.0
+
+            # Áp dụng điểm thưởng/phạt từ VideoMA PRF
+            if motion_centroid is not None and v_name in self.videoma_features:
+                v_vec = self.videoma_features[v_name]
+                v_vec_norm = v_vec / (np.linalg.norm(v_vec) + 1e-9)
+                motion_sim = float(np.dot(motion_centroid, v_vec_norm))
+                
+                # Penalty cho nhiễu (khác biệt bối cảnh)
+                if motion_sim < 0.65:
+                    consensus_bonus -= 0.15
+                # Bonus cho video cực kỳ đồng nhất bối cảnh với top 5
+                elif motion_sim > 0.85:
+                    consensus_bonus += 0.10
 
             candidate_items.append({
                 "index": idx,
@@ -431,7 +534,8 @@ class RetrievalEngine:
                 "asr_norm": float(audio_norm_arr[idx]),
                 "cec": float(cec_scores[idx]),
                 "has_anchor_match": bool(anchor_boost[idx] > 0),
-                "consensus_bonus": consensus_bonus
+                "consensus_bonus": consensus_bonus,
+                "graph_score": graph_results.get(v_name, {}).get("graph_score", 0.0)
             })
 
         # STAGE 3: EVIDENCE JUDGE V3.3 RE-RANKING & 3-LEVEL VETO
