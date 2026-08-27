@@ -592,21 +592,63 @@ class RetrievalEngine:
         return trake_res, processed_events
 
     def answer_qa(self, question: str, item: Dict[str, Any]) -> str:
-        """Visual QA Answer normalizer & VLM Simulator (Qwen-VL)"""
-        q_lower = question.lower()
+        """Sử dụng 9Router Vision API để trả lời câu hỏi QA (Thực tế)"""
         image_path = item.get("image_path", "")
-        
-        # Giả lập VLM Inference (Trong thực tế sẽ truyền image_path vào Qwen-VL API)
-        raw_ans = "Có" # Default
-        
-        if "màu gì" in q_lower or "color" in q_lower:
-            raw_ans = "xanh"
-        elif "bao nhiêu" in q_lower or "mấy" in q_lower or "how many" in q_lower:
-            raw_ans = "5"
-        elif "tên là gì" in q_lower or "name" in q_lower or "chữ gì" in q_lower:
-            raw_ans = "Cam Lâm"
+        if not image_path or not os.path.exists(image_path):
+            return "Không tìm thấy ảnh"
+
+        import base64
+        import requests
+        import json
+        import os
+
+        try:
+            with open(image_path, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
             
-        # Tiền xử lý đáp án cuối cùng
-        if hasattr(self, "qa_normalizer") and self.qa_normalizer:
-            return self.qa_normalizer.normalize_answer(raw_ans)
-        return raw_ans
+            base_url = os.getenv("LLM_BASE_URL", "http://localhost:20128/v1")
+            api_key = os.getenv("LLM_API_KEY", os.getenv("NINEROUTER_API_KEY", "default"))
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}"
+            }
+            
+            prompt = f"Trả lời thật ngắn gọn gọn (dưới 5 chữ) câu hỏi sau dựa trên bức ảnh: {question}"
+            
+            payload = {
+                "model": "gh/gemini-3.1-pro-preview", 
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{encoded_string}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "max_tokens": 50,
+                "temperature": 0.1
+            }
+            
+            # Gửi hình ảnh lên VLM qua 9Router
+            response = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=15)
+            if response.status_code == 200:
+                result = response.json()
+                raw_ans = result["choices"][0]["message"]["content"].strip()
+                
+                # Tiền xử lý đáp án cuối cùng
+                if hasattr(self, "qa_normalizer") and self.qa_normalizer:
+                    return self.qa_normalizer.normalize_answer(raw_ans)
+                return raw_ans
+            else:
+                print(f"⚠️ Lỗi API VLM: {response.text}")
+                return "Có"
+        except Exception as e:
+            print(f"⚠️ Lỗi gọi VLM API: {e}")
+            return "Có"
