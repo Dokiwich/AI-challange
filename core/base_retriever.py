@@ -8,6 +8,9 @@ from typing import List, Union, Optional
 import torch
 import numpy as np
 import clip
+import logging
+
+logger = logging.getLogger(__name__)
 
 class BaseVisualRetriever(ABC):
     """Lớp trừu tượng cho mọi Visual Embedding Retriever"""
@@ -28,7 +31,7 @@ class CLIPVisualRetriever(BaseVisualRetriever):
     
     def __init__(self, model_name: str = "ViT-L/14", device: Optional[str] = None):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[CLIPVisualRetriever] Loading {model_name} on {self.device}...")
+        logger.info(f"[CLIPVisualRetriever] Loading {model_name} on {self.device}...")
         self.model, self.preprocess = clip.load(model_name, device=self.device)
         self.model.eval()
         self._text_cache = {}

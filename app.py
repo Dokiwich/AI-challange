@@ -9,6 +9,13 @@ from core.retrieval_engine import RetrievalEngine
 from core.submission_exporter import SubmissionExporter
 from qdrant_client import QdrantClient
 from neo4j import GraphDatabase
+import logging
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AIC 2026 Video Retrieval", layout="wide", initial_sidebar_state="expanded")
 
@@ -20,16 +27,26 @@ if st.session_state.get("_engine_ver") != _ENGINE_VERSION:
 
 @st.cache_resource(show_spinner="Loading CLIP model and 4-Track Vector Database...")
 def get_engine(version=_ENGINE_VERSION):
+    qdrant_host = os.getenv("QDRANT_HOST", "localhost")
+    qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+    neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password = os.getenv("NEO4J_PASSWORD", "password")
+
     try:
-        qclient = QdrantClient("localhost", port=6333)
+        qclient = QdrantClient(qdrant_host, port=qdrant_port)
         qclient.get_collections()
-    except Exception:
+        logger.info(f"Connected to Qdrant at {qdrant_host}:{qdrant_port}")
+    except Exception as e:
+        logger.error(f"Failed to connect to Qdrant at {qdrant_host}:{qdrant_port}. Error: {e}")
         qclient = None
         
     try:
-        ndriver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+        ndriver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
         ndriver.verify_connectivity()
-    except Exception:
+        logger.info(f"Connected to Neo4j at {neo4j_uri}")
+    except Exception as e:
+        logger.error(f"Failed to connect to Neo4j at {neo4j_uri}. Error: {e}")
         ndriver = None
         
     return RetrievalEngine(qdrant_client=qclient, neo4j_driver=ndriver)
@@ -54,7 +71,7 @@ st.sidebar.markdown("### 🤖 Chế độ AI (AI Mode)")
 
 # NÚT BẬT / TẮT MODE AI CHÍNH
 enable_ai_mode = st.sidebar.toggle(
-    "⚡ Kích hoạt Chế độ AI (LLM / 9Router)",
+    "⚡ Kích hoạt Chế độ AI (OpenRouter / LLM)",
     value=st.session_state.get("enable_ai_mode", True),
     key="enable_ai_mode_toggle",
     help="Bật để AI phân tích cấu trúc 6D ngữ nghĩa, bóc tách hành động cốt lõi, sinh giả thuyết và định tuyến thông minh."
@@ -83,12 +100,12 @@ if enable_ai_mode:
     col_status, col_btn = st.sidebar.columns([3, 1])
     force_check = False
     with col_btn:
-        if st.button("🔄", help="Kiểm tra lại kết nối 9Router / LLM"):
+        if st.button("🔄", help="Kiểm tra lại kết nối OpenRouter / LLM"):
             force_check = True
 
     ai_connected = engine.compiler.ai_parser.check_connection(force=force_check)
     with col_status:
-        st.caption(f"Trạng thái: {'🟢 Online (9Router)' if ai_connected else '🔴 Offline / Fallback Cục bộ'}")
+        st.caption(f"Trạng thái: {'🟢 Online (OpenRouter)' if ai_connected else '🔴 Offline / Fallback Cục bộ'}")
 
     if ai_connected:
         available_models = engine.compiler.ai_parser.get_available_models()
@@ -97,7 +114,7 @@ if enable_ai_mode:
         selected_model = st.sidebar.selectbox("AI Model:", available_models, index=default_idx)
         engine.compiler.ai_parser.model_name = selected_model
     else:
-        st.sidebar.caption("⚠️ Không kết nối được 9Router. Hệ thống sẽ tự động dùng bộ dịch Google và phân tích cục bộ.")
+        st.sidebar.caption("⚠️ Không kết nối được OpenRouter. Hệ thống sẽ tự động dùng bộ dịch Google và phân tích cục bộ.")
 else:
     engine_mode = "offline"
     st.sidebar.info("⚡ **Track 1: Offline V2 (Cục bộ 100% - Zero LLM)** đang bật.\nTốc độ phản hồi cực nhanh, không phụ thuộc vào internet hoặc mô hình LLM.")

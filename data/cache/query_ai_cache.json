@@ -1,0 +1,3381 @@
+{
+  "190f374935916b0f93a8de0b247ab05a": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "A group of 5 people is playing next to a yellow animal.",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": null,
+        "count": 5,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "animal",
+        "attributes": {
+          "color": "yellow"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "playing",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "A group of 5 people is playing next to a yellow animal.",
+        "hypotheses": [
+          "Five individuals are having fun beside a yellow creature.",
+          "A group of five is interacting with a yellow animal."
+        ],
+        "scene_prompt": null,
+        "action_prompt": "playing",
+        "objects": [
+          "yellow animal"
+        ],
+        "semantic_importance": 0.9
+      }
+    ],
+    "aspect_prompts": {
+      "global": "A group of 5 people is playing next to a yellow animal.",
+      "scene": null,
+      "action": "playing",
+      "object": "yellow animal",
+      "attributes": "color: yellow",
+      "relations": null
+    },
+    "source_grounding": [],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "0a2df92b478c00bc73f44b6e99b456ad": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "A group of 5 people is playing next to a yellow animal. One of them hides a pumpkin-like object. A man wakes up and doesn't see the pumpkin, so he wakes the animal.",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "count": 5,
+          "is_hard_constraint": true
+        },
+        "count": 5,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "animal",
+        "attributes": {
+          "color": "yellow"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "type": "pumpkin-like"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "playing",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "hiding",
+        "subject": "E1",
+        "object": "E3",
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV3",
+        "action": "waking up",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 3
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV2",
+        "to": "EV3",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "A group of 5 people is playing next to a yellow animal.",
+        "hypotheses": [
+          "5 individuals are having fun near a yellow creature.",
+          "Five people are enjoying themselves beside a yellow animal."
+        ],
+        "scene_prompt": "null",
+        "action_prompt": "playing",
+        "objects": [
+          "yellow animal"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "One person hides a pumpkin-like object.",
+        "hypotheses": [
+          "A person conceals a pumpkin-like item.",
+          "Someone is hiding an object resembling a pumpkin."
+        ],
+        "scene_prompt": "null",
+        "action_prompt": "hiding",
+        "objects": [
+          "pumpkin-like object"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 3,
+        "canonical_prompt": "A man wakes up and doesn't see the pumpkin.",
+        "hypotheses": [
+          "A man awakens and finds the pumpkin missing.",
+          "A man gets up and realizes the pumpkin is gone."
+        ],
+        "scene_prompt": "null",
+        "action_prompt": "waking up",
+        "objects": [
+          "yellow animal"
+        ],
+        "semantic_importance": 0.8
+      }
+    ],
+    "aspect_prompts": {
+      "global": "A group of 5 people is playing next to a yellow animal, one hides a pumpkin-like object, and a man wakes up to find it missing.",
+      "scene": "null",
+      "action": "playing, hiding, waking up",
+      "object": "yellow animal, pumpkin-like object",
+      "attributes": "null",
+      "relations": "null"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "con vật màu vàng",
+        "canonical_en": "yellow animal",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "vật trông như trái bí đỏ",
+        "canonical_en": "pumpkin-like object",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "d91952b872f379057d5dcc686cb46c23": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "A chef cooks a dish in a pan with white sausage pieces and green vegetables.",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "color": null,
+          "clothing": null,
+          "has_glasses": null
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "color": "white",
+          "type": "sausage"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "color": "green",
+          "type": "vegetable"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {
+          "color": null,
+          "type": "pan"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "cooking",
+        "subject": "E1",
+        "object": "E4",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "adding",
+        "subject": "E1",
+        "object": "E3",
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV3",
+        "action": "stirring",
+        "subject": "E1",
+        "object": "E4",
+        "phase_index": 3
+      },
+      {
+        "event_id": "EV4",
+        "action": "mixing",
+        "subject": "E1",
+        "object": "E4",
+        "phase_index": 4
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV2",
+        "to": "EV3",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV3",
+        "to": "EV4",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "A chef cooks in a pan with white sausage pieces and green vegetables.",
+        "hypotheses": [
+          "A chef prepares a dish in a frying pan.",
+          "A chef is cooking with sausage and vegetables."
+        ],
+        "scene_prompt": "kitchen or null",
+        "action_prompt": "cooking or null",
+        "objects": [
+          "pan",
+          "white sausage",
+          "green vegetable"
+        ],
+        "semantic_importance": 0.9
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "The chef adds green vegetables to the pan.",
+        "hypotheses": [
+          "The chef puts green vegetables into the pan.",
+          "The chef includes green vegetables in the dish."
+        ],
+        "scene_prompt": "kitchen or null",
+        "action_prompt": "adding or null",
+        "objects": [
+          "green vegetable",
+          "pan"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 3,
+        "canonical_prompt": "The chef stirs the ingredients in the pan.",
+        "hypotheses": [
+          "The chef mixes the ingredients in the pan.",
+          "The chef uses a tool to stir the dish."
+        ],
+        "scene_prompt": "kitchen or null",
+        "action_prompt": "stirring or null",
+        "objects": [
+          "pan"
+        ],
+        "semantic_importance": 0.85
+      },
+      {
+        "phase_index": 4,
+        "canonical_prompt": "The chef mixes the white sausage and green vegetables in the pan.",
+        "hypotheses": [
+          "The chef combines the ingredients in the pan.",
+          "The chef blends the sausage and vegetables."
+        ],
+        "scene_prompt": "kitchen or null",
+        "action_prompt": "mixing or null",
+        "objects": [
+          "pan",
+          "white sausage",
+          "green vegetable"
+        ],
+        "semantic_importance": 0.9
+      }
+    ],
+    "aspect_prompts": {
+      "global": "A chef is cooking a dish with sausage and vegetables in a pan.",
+      "scene": "kitchen or null",
+      "action": "cooking, adding, stirring, mixing or null",
+      "object": "white sausage, green vegetable, pan or null",
+      "attributes": "color: white, green or null",
+      "relations": "chef in the kitchen or null"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "đầu bếp",
+        "canonical_en": "chef",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "món ăn",
+        "canonical_en": "dish",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "dồi trường",
+        "canonical_en": "sausage",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "rau xanh",
+        "canonical_en": "green vegetables",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "chảo",
+        "canonical_en": "pan",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "3808c4004ea909621d2e40d6ac315695": {
+    "task_type": "TRAKE",
+    "is_sequence": true,
+    "global_query_en": "Chef rolls a long ingredient in green and red mixture, then coats it in white powder.",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "color": null,
+          "clothing": null,
+          "has_glasses": null
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "length": "long",
+          "type": "ingredient"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "color": "white",
+          "type": "powder"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {
+          "color": "green and red",
+          "type": "mixture"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E5",
+        "type": "object",
+        "attributes": {
+          "type": "plate"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "rolling",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "transferring",
+        "subject": "E1",
+        "object": "E5",
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV3",
+        "action": "coating",
+        "subject": "E1",
+        "object": "E3",
+        "phase_index": 3
+      },
+      {
+        "event_id": "EV4",
+        "action": "placing",
+        "subject": "E1",
+        "object": "E5",
+        "phase_index": 4
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV2",
+        "to": "EV3",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV3",
+        "to": "EV4",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Chef rolls a long ingredient in a green and red mixture.",
+        "hypotheses": [
+          "Chef prepares the ingredient in a mixture.",
+          "Chef mixes the ingredient with colors."
+        ],
+        "scene_prompt": null,
+        "action_prompt": "rolling",
+        "objects": [
+          "long ingredient",
+          "green and red mixture"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "Chef transfers the ingredient to a plate with white powder.",
+        "hypotheses": [
+          "Chef moves the ingredient to a new plate.",
+          "Chef prepares for coating."
+        ],
+        "scene_prompt": null,
+        "action_prompt": "transferring",
+        "objects": [
+          "long ingredient",
+          "white powder",
+          "plate"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 3,
+        "canonical_prompt": "Chef coats the ingredient in white powder.",
+        "hypotheses": [
+          "Chef applies powder to the ingredient.",
+          "Chef covers the ingredient."
+        ],
+        "scene_prompt": null,
+        "action_prompt": "coating",
+        "objects": [
+          "long ingredient",
+          "white powder"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 4,
+        "canonical_prompt": "Chef places the coated ingredient on a plate.",
+        "hypotheses": [
+          "Chef sets the ingredient aside.",
+          "Chef finishes the preparation."
+        ],
+        "scene_prompt": null,
+        "action_prompt": "placing",
+        "objects": [
+          "long ingredient",
+          "plate"
+        ],
+        "semantic_importance": 0.8
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Chef prepares a long ingredient by rolling and coating it.",
+      "scene": null,
+      "action": "rolling, transferring, coating, placing",
+      "object": "long ingredient, white powder, green and red mixture, plate",
+      "attributes": "long, white, green and red",
+      "relations": null
+    },
+    "source_grounding": [
+      {
+        "source_vi": "nguyên liệu dài",
+        "canonical_en": "long ingredient",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "hỗn hợp màu xanh lá cây và màu đỏ",
+        "canonical_en": "green and red mixture",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "bột trắng",
+        "canonical_en": "white powder",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "2cf0a64c2805c819394041df213a22a4": {
+    "task_type": "QA",
+    "is_sequence": true,
+    "global_query_en": "video showing the process of making purple pastries filled with bean sprouts, carrots, and a lotus seed in each, showing how many pastries the mold makes at a time",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": null,
+        "count": 1,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "color": "purple",
+          "filling": [
+            "bean sprouts",
+            "carrot",
+            "lotus seed"
+          ]
+        },
+        "count": null,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "type": "mold"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "making pastry",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "using mold",
+        "subject": "E1",
+        "object": "E3",
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "making purple pastry with ingredients bean sprouts, carrot and lotus seed",
+        "hypotheses": [
+          "preparing purple pastry filling",
+          "stuffing pastry with ingredients"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "making pastry",
+        "objects": [
+          "pastry",
+          "bean sprouts",
+          "carrot",
+          "lotus seed"
+        ],
+        "semantic_importance": 0.5
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "using a pastry mold to shape multiple pastries at once",
+        "hypotheses": [
+          "pressing pastries into a mold",
+          "counting pastries made by the mold"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "using mold",
+        "objects": [
+          "mold",
+          "pastry"
+        ],
+        "semantic_importance": 0.5
+      }
+    ],
+    "aspect_prompts": {
+      "global": "process of making purple pastry filled with bean sprouts, carrot, and lotus seed, using a mold",
+      "scene": null,
+      "action": "making pastry and using mold",
+      "object": "purple pastry, bean sprouts, carrot, lotus seed, mold",
+      "attributes": "purple color",
+      "relations": "person making pastry, filling inside pastry"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "bánh màu tím",
+        "canonical_en": "purple pastry",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "giá, cà rốt",
+        "canonical_en": "bean sprouts, carrot",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "hạt sen",
+        "canonical_en": "lotus seed",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "khuôn",
+        "canonical_en": "mold",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "2db0d1ac413f25d5add20caec99d08c8": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "a female chef stirs a mixture of ingredients including chicken, red pepper, green pepper, peanuts, and shallots in a pan, then turns off the heat, adds lime zest and lime juice, and transfers the food to a plate",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "gender": "female",
+          "role": "chef"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "type": "pan"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "contents": "chicken, red pepper, green pepper, peanuts, shallots"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {
+          "type": "lime zest and lime juice"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E5",
+        "type": "object",
+        "attributes": {
+          "type": "plate"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "stirring",
+        "subject": "E1",
+        "object": "E3",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "adding lime zest and juice",
+        "subject": "E1",
+        "object": "E4",
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV3",
+        "action": "transferring food to plate",
+        "subject": "E1",
+        "object": "E5",
+        "phase_index": 3
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV2",
+        "to": "EV3",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "female chef stirs ingredients in a pan",
+        "hypotheses": [
+          "woman cooking in a pan",
+          "chef mixing food with a spatula"
+        ],
+        "scene_prompt": "kitchen",
+        "action_prompt": "stirring",
+        "objects": [
+          "pan",
+          "chicken",
+          "peppers",
+          "peanuts",
+          "shallots"
+        ],
+        "semantic_importance": 0.4
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "chef adds lime zest and juice into the pan",
+        "hypotheses": [
+          "adding seasoning to a pan"
+        ],
+        "scene_prompt": "kitchen",
+        "action_prompt": "adding ingredients",
+        "objects": [
+          "pan",
+          "lime"
+        ],
+        "semantic_importance": 0.3
+      },
+      {
+        "phase_index": 3,
+        "canonical_prompt": "transferring food from pan to a plate",
+        "hypotheses": [
+          "pouring food onto a plate"
+        ],
+        "scene_prompt": "kitchen",
+        "action_prompt": "pouring",
+        "objects": [
+          "pan",
+          "plate"
+        ],
+        "semantic_importance": 0.3
+      }
+    ],
+    "aspect_prompts": {
+      "global": "female chef cooking and stirring ingredients in a pan then plating",
+      "scene": "kitchen",
+      "action": "stirring and cooking",
+      "object": "pan, chicken, peppers, peanuts, shallots, plate",
+      "attributes": "female chef",
+      "relations": "chef stirring ingredients inside pan"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "đầu bếp",
+        "canonical_en": "chef",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "thịt gà",
+        "canonical_en": "chicken",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "ớt đỏ",
+        "canonical_en": "red pepper",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "ớt xanh",
+        "canonical_en": "green pepper",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "đậu phộng",
+        "canonical_en": "peanuts",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "hành tím",
+        "canonical_en": "shallots",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "chảo",
+        "canonical_en": "pan",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "đĩa",
+        "canonical_en": "plate",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "fa3a0d393df32a7fa6bcdd8e2be21de7": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "close-up of a group of 3 cyclists riding close together, two cyclists wearing blue jerseys with red and white helmets, alongside a cyclist in a yellow jersey, a white strap hanging down near the neck from the red helmet",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "clothing": "blue jersey",
+          "helmet": "red and white"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "clothing": "yellow jersey"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "color": "white",
+          "location": "hanging down near neck from red helmet"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "cycling",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "cycling",
+        "subject": "E2",
+        "object": null,
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "close-up of a group of 3 cyclists riding close together, two wearing blue jerseys with red and white helmets, and one wearing a yellow jersey",
+        "hypotheses": [
+          "close-up shot of three bicycle racers riding tightly together",
+          "cyclists in blue and yellow jerseys riding in a pack"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "riding bicycles close together",
+        "objects": [
+          "bicycle",
+          "helmet",
+          "jersey"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "close-up of 3 cyclists riding together, blue and yellow jerseys, red and white helmets",
+      "scene": null,
+      "action": "riding bicycles",
+      "object": "cyclists, bicycles, helmets",
+      "attributes": "blue jersey, yellow jersey, red and white helmet, white strap",
+      "relations": "cyclists riding close to each other"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "vận động viên đua xe đạp",
+        "canonical_en": "cyclist",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "áo xanh biển",
+        "canonical_en": "blue jersey",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "áo vàng",
+        "canonical_en": "yellow jersey",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "mũ bảo hiểm đỏ và trắng",
+        "canonical_en": "red and white helmet",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "1ee21b12175c7b43a6c73d83816e3e33": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "sequence of camera shots introducing food ingredients including seafood and colorful ingredients",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "object",
+        "attributes": {
+          "type": "seafood"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "type": "colorful"
+        },
+        "count": null,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "type": "all ingredients"
+        },
+        "count": null,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "camera tilting up to first seafood ingredient",
+        "subject": "camera",
+        "object": "E1",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "close up top down shot of second seafood ingredient then panning to colorful ingredients",
+        "subject": "camera",
+        "object": "E2",
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV3",
+        "action": "static wide shot of all ingredients",
+        "subject": "camera",
+        "object": "E3",
+        "phase_index": 3
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV2",
+        "to": "EV3",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "camera angled up ending at the first seafood ingredient",
+        "hypotheses": [
+          "low angle shot tilting up to seafood"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "camera tilt up",
+        "objects": [
+          "seafood",
+          "ingredient"
+        ],
+        "semantic_importance": 0.33
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "top down close up shot of second seafood ingredient and colorful ingredients",
+        "hypotheses": [
+          "overhead close up of seafood and colorful items"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "top down close up",
+        "objects": [
+          "seafood",
+          "colorful ingredients"
+        ],
+        "semantic_importance": 0.33
+      },
+      {
+        "phase_index": 3,
+        "canonical_prompt": "static wide shot of all ingredients",
+        "hypotheses": [
+          "fixed wide angle shot showing all food ingredients"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "static wide shot",
+        "objects": [
+          "all ingredients"
+        ],
+        "semantic_importance": 0.34
+      }
+    ],
+    "aspect_prompts": {
+      "global": "sequence of camera shots showing food ingredients including seafood and colorful items",
+      "scene": null,
+      "action": "camera tilting up, top down close up, static wide shot",
+      "object": "seafood, colorful ingredients",
+      "attributes": "seafood, colorful",
+      "relations": null
+    },
+    "source_grounding": [
+      {
+        "source_vi": "nguyên liệu hải sản",
+        "canonical_en": "seafood ingredient",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "nguyên liệu nhiều màu sắc",
+        "canonical_en": "colorful ingredients",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "toàn cảnh toàn bộ nguyên liệu",
+        "canonical_en": "wide shot of all ingredients",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "47412a69c837d09b154e823a18711e58": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "Two women crafting on a wooden platform inside a rural house with a large window, with a row of about 10 wooden cutting boards hanging horizontally in the background",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "gender": "female"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "furniture",
+        "attributes": {
+          "type": "wooden platform",
+          "Vietnamese": "ván ngựa"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "architecture",
+        "attributes": {
+          "type": "house",
+          "style": "rural",
+          "has_window": "large window"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {
+          "material": "wood",
+          "shape": "cutting boards",
+          "arrangement": "hanging in a horizontal row",
+          "count": 10
+        },
+        "count": 10,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "crafting",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Two women doing handicraft on a wooden platform inside a rural house with a large window, with a row of wooden cutting boards hanging in the background",
+        "hypotheses": [
+          "Two women working on crafts sitting on a wooden bench inside a rustic house",
+          "Women making crafts indoors with hanging wooden boards in the background"
+        ],
+        "scene_prompt": "rural house interior with large window",
+        "action_prompt": "doing handicraft",
+        "objects": [
+          "wooden platform",
+          "wooden cutting boards",
+          "large window"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Two women crafting on a wooden platform inside a rural house with a large window, with a row of about 10 wooden cutting boards hanging horizontally in the background",
+      "scene": "rural house interior, large window",
+      "action": "doing handicraft, working",
+      "object": "wooden platform, cutting boards, window",
+      "attributes": "wooden cutting boards hanging in a row",
+      "relations": "women ON wooden platform, cutting boards IN_BACKGROUND of women"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "ngôi nhà nông thôn",
+        "canonical_en": "rural house",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "cửa sổ lớn",
+        "canonical_en": "large window",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "hai người phụ nữ",
+        "canonical_en": "two women",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "làm thủ công",
+        "canonical_en": "doing handicraft",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "bộ ván ngựa",
+        "canonical_en": "wooden platform",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "thớt gỗ được treo thành một hàng ngang",
+        "canonical_en": "wooden cutting boards hanging in a horizontal row",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "0460c9f01eafd23613c36aa6ed20c246": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "Stage with large 3D metallic glitter-covered raised text reading 'SAC CO ...' placed at the front edge of the stage",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "stage",
+        "attributes": null,
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "text",
+        "attributes": {
+          "style": "3D metallic glitter-covered raised text",
+          "content": "SẮC CỔ ..."
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "placed",
+        "subject": "E2",
+        "object": "E1",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Stage with large 3D metallic glitter-covered raised text reading 'SAC CO ...' placed at the front edge of the stage",
+        "hypotheses": [
+          "Stage with metallic 3D letters saying SAC CO at the edge",
+          "Glittering 3D sign saying SAC CO on a stage front"
+        ],
+        "scene_prompt": "stage",
+        "action_prompt": null,
+        "objects": [
+          "stage",
+          "3D text",
+          "sign"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Stage with large 3D metallic glitter-covered raised text reading 'SAC CO ...' placed at the front edge of the stage",
+      "scene": "stage",
+      "action": null,
+      "object": "stage, 3D text, sign",
+      "attributes": "metallic, glitter-covered, 3D",
+      "relations": "text ON_EDGE_OF stage"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "Sân khấu",
+        "canonical_en": "stage",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "dòng chữ nổi 3D to, ánh kim phủ kim tuyến",
+        "canonical_en": "large 3D metallic glitter-covered raised text",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "SẮC CỔ",
+        "canonical_en": "SAC CO",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "mép trước sân khấu",
+        "canonical_en": "front edge of the stage",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [
+      "SẮC CỔ"
+    ],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "b89764ecefc20d32a7be8c3ebf43f35b": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "Footage filmed from behind a leading group of cyclists, consisting of one lead rider and three trailing riders, as the group turns right onto Ho Tung Mau street at an intersection with a green traffic light counting down to 13 seconds",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "role": "lead cyclist"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "role": "trailing cyclists"
+        },
+        "count": 3,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "type": "traffic light",
+          "color": "green",
+          "countdown": "13 seconds"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "location",
+        "attributes": {
+          "name": "Ho Tung Mau street",
+          "feature": "intersection"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "riding",
+        "subject": "E1, E2",
+        "object": null,
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "turning right",
+        "subject": "E1, E2",
+        "object": "E4",
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Cyclists riding on the road filmed from behind",
+        "hypotheses": [
+          "group of cyclists riding ahead"
+        ],
+        "scene_prompt": "road intersection",
+        "action_prompt": "riding",
+        "objects": [
+          "cyclists",
+          "road"
+        ],
+        "semantic_importance": 0.5
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "Cyclists turning right at an intersection with a green traffic light showing 13 seconds countdown",
+        "hypotheses": [
+          "cyclists turning right at intersection"
+        ],
+        "scene_prompt": "intersection with traffic light",
+        "action_prompt": "turning right",
+        "objects": [
+          "cyclists",
+          "traffic light"
+        ],
+        "semantic_importance": 0.9
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Footage filmed from behind a group of cyclists turning right at an intersection with a green countdown traffic light",
+      "scene": "road intersection with traffic light",
+      "action": "turning right",
+      "object": "cyclists, traffic light, road",
+      "attributes": "green traffic light, 13 seconds countdown",
+      "relations": "cyclists behind lead cyclist, cyclists turning right into Ho Tung Mau street"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "nhóm dẫn đầu",
+        "canonical_en": "leading group",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "1 tay đua dẫn trước và 3 tay đua bám phía sau",
+        "canonical_en": "one lead rider and three trailing riders",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "rẽ phải vào đường Hồ Tùng Mậu",
+        "canonical_en": "turns right onto Ho Tung Mau street",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "đèn xanh đang đếm ngược đến 13 giây",
+        "canonical_en": "green traffic light counting down to 13 seconds",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [
+      "Hồ Tùng Mậu",
+      "13"
+    ],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "d391760ea593019996cf9d58a3ca0bcc": {
+    "task_type": "QA",
+    "is_sequence": true,
+    "global_query_en": "philanthropist supports nursing home for elderly, followed by an elderly man talking to a group of foreigners",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "group": "philanthropist"
+        },
+        "count": null,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E2",
+        "type": "place",
+        "attributes": {
+          "type": "nursing home",
+          "for_elderly": true
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "person",
+        "attributes": {
+          "age": "elderly",
+          "gender": "male"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "person",
+        "attributes": {
+          "group": "foreigners"
+        },
+        "count": null,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "supports",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "talking",
+        "subject": "E3",
+        "object": "E4",
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "philanthropist supporting a nursing home for the elderly",
+        "hypotheses": [
+          "donor giving aid to elderly shelter"
+        ],
+        "scene_prompt": "nursing home or shelter",
+        "action_prompt": "supporting, helping, donating",
+        "objects": [
+          "nursing home",
+          "elderly shelter"
+        ],
+        "semantic_importance": 0.5
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "elderly man talking to a group of foreigners",
+        "hypotheses": [
+          "old man having a conversation with foreign tourists or volunteers"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "talking, conversing",
+        "objects": [
+          "elderly man",
+          "foreigners"
+        ],
+        "semantic_importance": 0.5
+      }
+    ],
+    "aspect_prompts": {
+      "global": "philanthropist supports nursing home, then elderly man talks to foreigners",
+      "scene": "nursing home",
+      "action": "supporting and talking",
+      "object": "nursing home, elderly man, foreigners",
+      "attributes": "elderly",
+      "relations": "elderly man talking to foreigners"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "mạnh thường quân hỗ trợ một quán trọ dành cho người cao tuổi",
+        "canonical_en": "philanthropist supports a nursing home for the elderly",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "cụ ông trò chuyện với nhóm người nước ngoài",
+        "canonical_en": "elderly man talking to a group of foreigners",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "df4c533173199e1f573db20a1519a7a1": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "a person taking a picture of a rhinoceros painting on a wall, ending with a person taking a picture of 3 monkeys graffiti on a bridge",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": null,
+        "count": 1,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "subject": "rhinoceros painting",
+          "location": "wall"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "subject": "3 monkeys graffiti",
+          "location": "bridge"
+        },
+        "count": 3,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "taking a photo with phone",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "taking a photo of graffiti",
+        "subject": "E1",
+        "object": "E3",
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "a person using a mobile phone to take a picture of a rhinoceros painting on a wall",
+        "hypotheses": [
+          "person photographing rhino mural",
+          "smartphone capturing rhino art"
+        ],
+        "scene_prompt": "indoor or outdoor wall with painting",
+        "action_prompt": "taking photo with phone",
+        "objects": [
+          "mobile phone",
+          "rhinoceros painting",
+          "wall"
+        ],
+        "semantic_importance": 0.5
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "a person taking a photo of 3 monkeys graffiti on a bridge",
+        "hypotheses": [
+          "photographing three monkeys street art on bridge",
+          "person with camera looking at monkey graffiti"
+        ],
+        "scene_prompt": "bridge",
+        "action_prompt": "taking photo",
+        "objects": [
+          "mobile phone",
+          "3 monkeys graffiti",
+          "bridge"
+        ],
+        "semantic_importance": 0.5
+      }
+    ],
+    "aspect_prompts": {
+      "global": "person taking pictures of street art, starting with a rhino painting and ending with 3 monkeys graffiti on a bridge",
+      "scene": "wall and bridge",
+      "action": "taking photos with a phone",
+      "object": "rhinoceros painting, 3 monkeys graffiti, mobile phone",
+      "attributes": null,
+      "relations": "person photographing painting, person photographing bridge graffiti"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "dùng điện thoại chụp ảnh bức tranh hình tê giác",
+        "canonical_en": "using phone to take a picture of a rhinoceros painting",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "chụp ảnh các hình graffiti 3 chú khỉ trên một cây cầu",
+        "canonical_en": "taking pictures of 3 monkeys graffiti on a bridge",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "1bc76c73b7ab14c18fd1196a451f077f": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "Geography lecture clip showing a data table on urban networks in Vietnam with colored numbers for urban population statistics",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "object",
+        "attributes": {
+          "type": "data table",
+          "content": "urban network in Vietnam",
+          "color_coding": "red and blue numbers"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "role": "teacher"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "showing data table",
+        "subject": "E2",
+        "object": "E1",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Geography lecture clip showing a data table about urban networks in Vietnam with red and blue numbers",
+        "hypotheses": [
+          "Geography lesson video with a statistical table on urban areas",
+          "Teacher presenting a table of urban network data in Vietnam"
+        ],
+        "scene_prompt": "classroom or lecture presentation screen",
+        "action_prompt": "presenting or displaying data table",
+        "objects": [
+          "table",
+          "screen",
+          "text",
+          "numbers"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Geography lecture video with a statistical table about Vietnam urban network",
+      "scene": "classroom or lecture slide presentation",
+      "action": "displaying statistical table",
+      "object": "data table, numbers, text",
+      "attributes": "red and blue numbers",
+      "relations": "table displayed on screen"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "bài giảng môn Địa lí",
+        "canonical_en": "geography lecture",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "bảng số liệu về mạng lưới đô thị ở Việt Nam",
+        "canonical_en": "data table on urban networks in Vietnam",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "màu đỏ",
+        "canonical_en": "red color",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "màu xanh",
+        "canonical_en": "blue color",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [
+      "mạng lưới đô thị ở Việt Nam"
+    ],
+    "has_speech": true,
+    "speech_keywords": [
+      "Địa lí",
+      "mạng lưới đô thị",
+      "Việt Nam",
+      "dân số đô thị",
+      "vùng"
+    ]
+  },
+  "bd702f93f67ebbf27e0b1908245577e6": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "white seafood ingredient being scored with perpendicular lines on both surfaces, then cut into strips, placed in a bowl, and mixed with wine, pepper, and seasoning powder",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "object",
+        "attributes": {
+          "color": "white",
+          "type": "seafood"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "type": "bowl"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "type": "seasoning ingredients like wine, pepper, and seasoning powder"
+        },
+        "count": 3,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "scoring ingredient with perpendicular lines",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "cutting ingredient into strips",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV3",
+        "action": "placing ingredient into bowl and mixing with seasoning",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 3
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      },
+      {
+        "from": "EV2",
+        "to": "EV3",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "white seafood ingredient scored with perpendicular lines on both surfaces",
+        "hypotheses": [
+          "chef scoring white squid or seafood with knife crosshatch pattern"
+        ],
+        "scene_prompt": "kitchen cooking video",
+        "action_prompt": "scoring with knife",
+        "objects": [
+          "white seafood",
+          "knife"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "seafood ingredient cut into small strips",
+        "hypotheses": [
+          "cutting scored seafood into strips with knife"
+        ],
+        "scene_prompt": "kitchen cooking video",
+        "action_prompt": "cutting",
+        "objects": [
+          "seafood",
+          "knife",
+          "cutting board"
+        ],
+        "semantic_importance": 0.8
+      },
+      {
+        "phase_index": 3,
+        "canonical_prompt": "seafood strips placed in a bowl and mixed with wine, pepper, and seasoning",
+        "hypotheses": [
+          "mixing seafood strips in a bowl with spices"
+        ],
+        "scene_prompt": "kitchen cooking video",
+        "action_prompt": "mixing or seasoning",
+        "objects": [
+          "seafood strips",
+          "bowl",
+          "wine bottle",
+          "spices"
+        ],
+        "semantic_importance": 0.9
+      }
+    ],
+    "aspect_prompts": {
+      "global": "cooking video white seafood scored cut into strips mixed in bowl with wine pepper seasoning",
+      "scene": "kitchen",
+      "action": "scoring cutting mixing",
+      "object": "seafood, bowl, knife",
+      "attributes": "white color, cut into strips",
+      "relations": "seafood IN bowl"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "hải sản màu trắng",
+        "canonical_en": "white seafood",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "khứa theo những đường thẳng vuông góc",
+        "canonical_en": "scored with perpendicular lines",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "cắt thành từng que",
+        "canonical_en": "cut into strips",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "cho vào tô",
+        "canonical_en": "placed into a bowl",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "trộn đều với các gia vị gồm rượu, tiêu và hạt nêm",
+        "canonical_en": "mixed with wine, pepper and seasoning powder",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "4fbff1fabeb12f15325d6e73cf1163fa": {
+    "task_type": "QA",
+    "is_sequence": false,
+    "global_query_en": "Biology question number 11 from the 2022 National High School Exam showing a chart comparing the growth rate of plant species in coastal ecosystems, asking about plant species (II) optimal growth salinity",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "object",
+        "attributes": {
+          "document": "exam paper",
+          "subject": "Biology",
+          "question_number": "11"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "type": "chart",
+          "content": "growth rate of plant species in coastal ecosystems"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "showing chart",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Biology exam paper question 11 with a chart comparing plant growth rate and salinity",
+        "hypotheses": [
+          "exam paper showing biology question 11 and chart",
+          "chart of plant growth rate versus salinity in coastal ecosystems"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "showing chart",
+        "objects": [
+          "exam paper",
+          "chart",
+          "biology question"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Biology exam question 11 chart about plant growth rate and salinity",
+      "scene": null,
+      "action": "showing chart",
+      "object": "exam paper, chart, plant species",
+      "attributes": "question number 11",
+      "relations": null
+    },
+    "source_grounding": [
+      {
+        "source_vi": "Câu hỏi môn Sinh học",
+        "canonical_en": "Biology question",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "số thứ tự 11",
+        "canonical_en": "number 11",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "biểu đồ",
+        "canonical_en": "chart",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "tốc độ sinh trưởng của các loài thực vật",
+        "canonical_en": "growth rate of plant species",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "độ mặn",
+        "canonical_en": "salinity",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [
+      "11",
+      "Sinh học",
+      "2022"
+    ],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "d97ace7b793ded474abbb1cfcbdd9017": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "Estonian cyclist in blue jersey leading and celebrating victory by raising both hands off the handlebars near the finish line, followed by yellow and orange jersey cyclists",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "nationality": "Estonian",
+          "role": "cyclist",
+          "clothing": "blue jersey"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "role": "cyclist",
+          "clothing": "yellow jersey"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "person",
+        "attributes": {
+          "role": "cyclist",
+          "clothing": "orange jersey"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {
+          "type": "bicycle"
+        },
+        "count": 1,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "leading cycling race and celebrating",
+        "subject": "E1",
+        "object": "E4",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "raising both hands off handlebars",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV3",
+        "action": "riding towards finish line behind leader",
+        "subject": "E2",
+        "object": null,
+        "phase_index": 2
+      },
+      {
+        "event_id": "EV4",
+        "action": "riding towards finish line behind leader",
+        "subject": "E3",
+        "object": null,
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV3",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Estonian cyclist in blue jersey leading race and raising hands to celebrate near finish line",
+        "hypotheses": [
+          "cyclist in blue jersey celebrating with hands off handlebars",
+          "cyclist crossing finish line with arms raised"
+        ],
+        "scene_prompt": "cycling race finish line, Quang Nam street",
+        "action_prompt": "celebrating victory with hands raised",
+        "objects": [
+          "bicycle",
+          "finish line"
+        ],
+        "semantic_importance": 0.9
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "cyclists in yellow and orange jerseys following closely behind",
+        "hypotheses": [
+          "peloton chasing leader near finish",
+          "cyclists in yellow and orange shirts riding fast"
+        ],
+        "scene_prompt": "cycling race finish line",
+        "action_prompt": "riding bicycles fast",
+        "objects": [
+          "bicycles"
+        ],
+        "semantic_importance": 0.7
+      }
+    ],
+    "aspect_prompts": {
+      "global": "cycling race finish line with Estonian leader in blue jersey celebrating by raising hands, followed by yellow and orange jersey cyclists",
+      "scene": "road cycling race finish line in city",
+      "action": "celebrating victory, riding bicycle, hands off handlebars",
+      "object": "bicycle, finish line",
+      "attributes": "blue jersey, yellow jersey, orange jersey",
+      "relations": "E1 LEADING E2 AND E3"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "vận động viên người Estonia mặc áo xanh nước biển dẫn đầu",
+        "canonical_en": "Estonian athlete wearing blue jersey leading",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "buông cả hai tay khỏi ghi-đông, giang hai tay lên cao ăn mừng",
+        "canonical_en": "releasing both hands from handlebars, raising arms high to celebrate",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "vận động viên mặc áo vàng và một vận động viên mặc áo cam",
+        "canonical_en": "cyclist wearing yellow jersey and cyclist wearing orange jersey",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [
+      "Quảng Nam"
+    ],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "7b9399bce41052411f6bf6f9691d0277": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "A male teacher with glasses and a short-sleeved plaid shirt making hand gestures while teaching, followed by an illustration of a young woman with glasses and a white shirt sitting cross-legged on a gray sofa holding a cup of water and looking at a laptop.",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "gender": "male",
+          "role": "teacher",
+          "has_glasses": true,
+          "clothing": "short-sleeved plaid shirt"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "gender": "female",
+          "age": "young",
+          "has_glasses": true,
+          "clothing": "white shirt"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "color": "gray"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {},
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E5",
+        "type": "object",
+        "attributes": {},
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "teaching and gesturing with hands",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "sitting on sofa holding cup and looking at laptop",
+        "subject": "E2",
+        "object": "E3",
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "Male teacher wearing glasses and short-sleeved plaid shirt gesturing with hands while teaching",
+        "hypotheses": [
+          "Male instructor with glasses in plaid shirt explaining with gestures"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "teaching and gesturing with hands",
+        "objects": [
+          "teacher"
+        ],
+        "semantic_importance": 0.5
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "Young woman with glasses in white shirt sitting cross-legged on gray sofa holding a cup of water looking at a laptop",
+        "hypotheses": [
+          "Girl with glasses sitting on gray couch drinking water and using laptop"
+        ],
+        "scene_prompt": "gray sofa",
+        "action_prompt": "sitting cross-legged, holding cup, looking at laptop",
+        "objects": [
+          "young woman",
+          "sofa",
+          "cup",
+          "laptop"
+        ],
+        "semantic_importance": 0.5
+      }
+    ],
+    "aspect_prompts": {
+      "global": "Male teacher teaching with hand gestures followed by a young woman sitting on a sofa with a laptop and cup.",
+      "scene": "gray sofa",
+      "action": "teaching, gesturing, sitting, holding cup, looking at laptop",
+      "object": "cup, laptop, sofa",
+      "attributes": "glasses, plaid shirt, white shirt, short-sleeved",
+      "relations": "woman sitting on sofa, woman holding cup, woman looking at laptop"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "giáo viên nam đeo kính, mặc áo sơ mi kẻ sọc ngắn tay",
+        "canonical_en": "male teacher wearing glasses and short-sleeved plaid shirt",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "cô gái trẻ đeo kính, mặc áo sơ mi trắng, ngồi khoanh chân trên ghế sofa màu xám",
+        "canonical_en": "young woman wearing glasses, white shirt, sitting cross-legged on gray sofa",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "109d50a59f58b87112ddffcc0a9400e2": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "a lecture slide showing 3D white human characters surrounding a central red character, and two cartoon male characters playing tug of war facing each other with a rope",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "color": "white",
+          "style": "3D"
+        },
+        "count": null,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "color": "red"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "person",
+        "attributes": {
+          "style": "cartoon",
+          "gender": "male"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "object",
+        "attributes": {
+          "type": "rope"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "surrounding",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "playing tug of war",
+        "subject": "E3",
+        "object": "E4",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "a lecture slide with 3D white characters surrounding a red character and two cartoon men playing tug of war",
+        "hypotheses": [
+          "presentation slide featuring 3D figures and cartoon characters pulling a rope"
+        ],
+        "scene_prompt": "lecture slide",
+        "action_prompt": "surrounding and tug of war",
+        "objects": [
+          "slide",
+          "white characters",
+          "red character",
+          "cartoon characters",
+          "rope"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "a lecture slide showing 3D white characters surrounding a red character and two cartoon men doing tug of war",
+      "scene": "lecture slide",
+      "action": "surrounding, pulling rope",
+      "object": "white figures, red figure, cartoon men, rope, slide",
+      "attributes": "white color, red color, 3D style, cartoon style",
+      "relations": "white characters surrounding red character, two cartoon men opposing each other with rope"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "bài giảng",
+        "canonical_en": "lecture",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "slide",
+        "canonical_en": "slide",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "nhân vật người 3D màu trắng",
+        "canonical_en": "3D white human characters",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "nhân vật màu đỏ",
+        "canonical_en": "red character",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "nhân vật hoạt hình nam",
+        "canonical_en": "cartoon male characters",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "kéo co",
+        "canonical_en": "tug of war",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "sợi dây thừng",
+        "canonical_en": "rope",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "07ba59cf45788e91f1c788197bb5d699": {
+    "task_type": "QA",
+    "is_sequence": true,
+    "global_query_en": "lion dance performance with numbered poles and a spiral dragon model in the background",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "animal",
+        "attributes": {
+          "type": "lion dance costume"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "has_numbers": true
+        },
+        "count": null,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "shape": "spiral",
+          "animal": "dragon"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "performing",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "lion dance performance on numbered poles with a spiral dragon model in the background",
+        "hypotheses": [
+          "lion dance on poles with numbers and dragon background"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "performing lion dance",
+        "objects": [
+          "lion dance",
+          "poles",
+          "numbers",
+          "dragon model"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "lion dance performance with numbered poles and spiral dragon model in background",
+      "scene": null,
+      "action": "lion dance performing",
+      "object": "lion dance, poles, numbers, dragon model",
+      "attributes": "numbered poles, spiral dragon",
+      "relations": "dragon in background behind poles"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "chú lân đang biểu diễn",
+        "canonical_en": "lion dance performing",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "các cột để chú lân biểu diễn được dán những con số",
+        "canonical_en": "numbered poles for lion dance",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "mô hình con rồng uốn lượn hình xoắn ốc",
+        "canonical_en": "spiral dragon model",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "4f7815310ab2e41f58bac017d4801f82": {
+    "task_type": "QA",
+    "is_sequence": false,
+    "global_query_en": "A bowl of cooked congee with decoration, next to a small black bowl containing orange shredded topping which was previously sprinkled on the congee, surrounded by vegetables and scallions",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "food",
+        "attributes": {
+          "dish": "congee",
+          "state": "cooked and decorated"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "container",
+        "attributes": {
+          "color": "black",
+          "size": "small"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "food",
+        "attributes": {
+          "color": "orange",
+          "texture": "shredded fibers",
+          "role": "topping"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "food",
+        "attributes": {
+          "type": "vegetables and scallions"
+        },
+        "count": null,
+        "is_hard_constraint": false
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "is placed next to",
+        "subject": "E2",
+        "object": "E1",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "A bowl of congee next to a small black bowl containing orange shredded topping and vegetables",
+        "hypotheses": [
+          "Bowl of porridge with orange shredded topping next to it",
+          "Close up of congee bowl and small black bowl with topping"
+        ],
+        "scene_prompt": null,
+        "action_prompt": null,
+        "objects": [
+          "bowl of congee",
+          "small black bowl",
+          "orange shredded topping",
+          "vegetables",
+          "scallions"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "A bowl of cooked congee with a small black bowl containing orange shredded topping next to it, surrounded by vegetables and scallions",
+      "scene": null,
+      "action": null,
+      "object": "bowl of congee, small black bowl, orange shredded topping, vegetables, scallions",
+      "attributes": "black bowl, orange topping, shredded texture",
+      "relations": "black bowl NEXT_TO bowl of congee"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "tô cháo",
+        "canonical_en": "bowl of congee",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "chén nhỏ màu đen",
+        "canonical_en": "small black bowl",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "topping màu cam kết cấu hơi giống những sợi nhỏ",
+        "canonical_en": "orange shredded topping",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "rau, hành",
+        "canonical_en": "vegetables, scallions",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "da9ba5f46255ac9dbc0cb86a0940eafd": {
+    "task_type": "QA",
+    "is_sequence": false,
+    "global_query_en": "A video scene listing ingredients for cooking a dish, showing plates of meat, fresh leaves, seasoning packets, coconut milk, curry powder, wood ear mushrooms, lemongrass, and red chili, with a text overlay displaying 9 specific ingredients and their weights.",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "object",
+        "attributes": {
+          "description": "ingredients for cooking, meat, leaves, seasoning, coconut milk, curry powder, mushrooms, lemongrass, chili"
+        },
+        "count": 9,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "listing ingredients",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "ingredients laid out on a table with a list showing 9 items and their weights",
+        "hypotheses": [
+          "cooking ingredients flat lay with ingredient list overlay",
+          "recipe preparation scene with text showing ingredient weights"
+        ],
+        "scene_prompt": "kitchen or table setting with food ingredients",
+        "action_prompt": "showing ingredients and list",
+        "objects": [
+          "meat",
+          "leaves",
+          "seasoning",
+          "coconut milk",
+          "curry powder",
+          "mushrooms",
+          "lemongrass",
+          "chili",
+          "text table"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "ingredients laid out on a table with an ingredient weight list",
+      "scene": "tabletop setup with food items",
+      "action": "displaying cooking ingredients and text list",
+      "object": "meat, leaves, seasoning, coconut milk, curry powder, wood ear mushrooms, lemongrass, chili, ingredient table",
+      "attributes": "multiple cooking ingredients displayed together",
+      "relations": "ingredients arranged on a surface with text overlay"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "nguyên liệu",
+        "canonical_en": "ingredients",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "thịt",
+        "canonical_en": "meat",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "bảng nguyên liệu",
+        "canonical_en": "ingredient list",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "4e514aaabdcde88917ab52214361b2cb": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "a yellow lion dance or dragon or lion mascot jumping or falling from above near a small blue model ship",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "animal mascot",
+        "attributes": {
+          "color": "yellow",
+          "type": "lion or dragon"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "color": "blue",
+          "form": "model ship",
+          "size": "small"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "jumping or falling",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "a yellow lion dance mascot jumping or falling down near a small blue toy ship",
+        "hypotheses": [
+          "a yellow dragon mascot falling from above near a blue model boat",
+          "a yellow lion jumping close to a blue ship model"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "jumping or falling from above",
+        "objects": [
+          "yellow lion dance",
+          "yellow dragon",
+          "blue model ship"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "yellow lion or dragon mascot jumping or falling near a small blue model ship",
+      "scene": null,
+      "action": "jumping or falling from above",
+      "object": "yellow lion dance, blue model ship",
+      "attributes": "yellow color, blue model ship",
+      "relations": "yellow mascot NEAR blue model ship"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "chú lân (hay rồng/sư tử?) màu vàng",
+        "canonical_en": "yellow lion or dragon mascot",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "nhảy hay rơi từ trên cao xuống",
+        "canonical_en": "jumping or falling from above",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "mô hình chiếc tàu thủy nhỏ màu xanh dương",
+        "canonical_en": "small blue model ship",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "694b3e989d0cb6dba14ad68fa6805078": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "two young people hanging a large blue banner decorated with mountains, clouds, a road to school, and images of two children from disadvantaged areas wearing yellow shirts",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "count": 2,
+          "age": "young"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "color": "blue",
+          "type": "banner",
+          "decoration": "mountains, clouds, road to school, two children in yellow shirts"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "hanging",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "two young people hanging a large blue banner decorated with mountains, clouds, a road to school, and images of two children in yellow shirts",
+        "hypotheses": [
+          "two youth hanging up a blue banner with landscape and children illustrations",
+          "young people holding and putting up a large blue banner"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "hanging banner",
+        "objects": [
+          "two young people",
+          "large blue banner"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "two young people hanging a large blue banner decorated with mountains, clouds, a road to school, and images of two children in yellow shirts",
+      "scene": null,
+      "action": "hanging banner",
+      "object": "large blue banner with mountain and children illustrations",
+      "attributes": "blue banner, yellow shirts on banner children",
+      "relations": "people hanging banner"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "Hai bạn trẻ",
+        "canonical_en": "two young people",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "treo băng-rôn lớn có tông màu xanh dương",
+        "canonical_en": "hanging a large blue banner",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "hình ảnh núi, mây và một con đường dẫn tới trường học",
+        "canonical_en": "mountains, clouds, and a road leading to school",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "02 em bé vùng khó khăn đang mặc áo màu vàng",
+        "canonical_en": "two children from disadvantaged areas wearing yellow shirts",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "c005ab129129928e9c4fd5ef02017327": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "a person in red shirt and white hat pouring water on their face while two cyclists, one in dark blue and one in black and orange, are riding",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "clothing": "red shirt",
+          "hat": "white hat"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "person",
+        "attributes": {
+          "activity": "riding bicycle",
+          "clothing": "dark blue shirt"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "person",
+        "attributes": {
+          "activity": "riding bicycle",
+          "clothing": "black and orange"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "pouring water on face",
+        "subject": "E1",
+        "object": "water",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "riding bicycle and chasing",
+        "subject": "E2",
+        "object": "E3",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "a person in red shirt and white hat pouring water on face, with cyclists in background",
+        "hypotheses": [
+          "person wearing red clothes and white cap splashing water on face",
+          "cyclist in dark blue chasing cyclist in black and orange"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "pouring water on face, riding bicycle",
+        "objects": [
+          "water",
+          "bicycle",
+          "hat",
+          "shirt"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "a person in red shirt and white hat pouring water on face with cyclists nearby",
+      "scene": null,
+      "action": "pouring water on face, cycling",
+      "object": "water, bicycle",
+      "attributes": "red shirt, white hat, dark blue shirt, black and orange clothing",
+      "relations": "person pouring water on face"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "người áo đỏ",
+        "canonical_en": "person in red shirt",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "nón màu trắng",
+        "canonical_en": "white hat",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "lấy nước rưới vào mặt",
+        "canonical_en": "pouring water on face",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "hai người đi xe đạp",
+        "canonical_en": "two cyclists",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "áo xanh đậm",
+        "canonical_en": "dark blue shirt",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "áo đen phối cam",
+        "canonical_en": "black and orange clothing",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "33a5d2bdd4760bc3da19dfbca312c3da": {
+    "task_type": "KIS",
+    "is_sequence": true,
+    "global_query_en": "two young men riding a motorbike lying down on the seat and speeding, with a blue car and another motorcyclist in green shirt",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "count": 2,
+          "action_state": "lying down on motorcycle seat"
+        },
+        "count": 2,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "vehicle",
+        "attributes": {
+          "type": "motorbike"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "vehicle",
+        "attributes": {
+          "color": "blue",
+          "type": "car"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E4",
+        "type": "person",
+        "attributes": {
+          "clothing": "blue shirt"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E5",
+        "type": "vehicle",
+        "attributes": {
+          "type": "motorbike"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "riding motorbike at high speed while lying down",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "two young men riding motorbike lying down on the seat speeding, blue car, motorcyclist in green shirt, red circles highlighting the two men",
+        "hypotheses": [
+          "two youths lying on a speeding motorcycle",
+          "motorcyclists speeding with red circle overlays"
+        ],
+        "scene_prompt": "street or road",
+        "action_prompt": "riding motorbike lying down speeding",
+        "objects": [
+          "motorbike",
+          "car",
+          "red circles"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "two young men lying down on a speeding motorbike, blue car, and another motorcyclist in green shirt",
+      "scene": "street",
+      "action": "riding motorbike lying down and speeding",
+      "object": "motorbike, car, red circles",
+      "attributes": "blue car, green shirt",
+      "relations": "two young men riding motorbike"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "2 thanh niên điều khiển xe máy bất ngờ nằm dài trên yên",
+        "canonical_en": "two young men riding motorbike lying down on the seat",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "phóng với tốc độ cao",
+        "canonical_en": "speeding with high speed",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "ô tô màu xanh",
+        "canonical_en": "blue car",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "người đi xe máy mặc áo xanh",
+        "canonical_en": "motorcyclist wearing blue shirt",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "8ce81207f599600752988bca3069f61a": {
+    "task_type": "QA",
+    "is_sequence": true,
+    "global_query_en": "autonomous car steering wheel turns right, then camera cuts outside showing white car turning left under a red sign with 6 Chinese characters, what is the number on the side of the white car",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {},
+        "count": 1,
+        "is_hard_constraint": false
+      },
+      {
+        "entity_id": "E2",
+        "type": "vehicle",
+        "attributes": {
+          "type": "car",
+          "color": "white",
+          "has_number": true
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "sign",
+        "attributes": {
+          "color": "red",
+          "text_type": "Chinese characters",
+          "character_count": 6
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "steering",
+        "subject": "E1",
+        "object": "steering wheel",
+        "phase_index": 1
+      },
+      {
+        "event_id": "EV2",
+        "action": "turning",
+        "subject": "E2",
+        "object": null,
+        "phase_index": 2
+      }
+    ],
+    "temporal_edges": [
+      {
+        "from": "EV1",
+        "to": "EV2",
+        "relation": "BEFORE"
+      }
+    ],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "POV from inside a self-driving car seeing steering wheel turning right",
+        "hypotheses": [
+          "driver turning steering wheel inside car",
+          "dashboard camera view turning right"
+        ],
+        "scene_prompt": "inside car",
+        "action_prompt": "steering wheel turning right",
+        "objects": [
+          "steering wheel",
+          "car interior"
+        ],
+        "semantic_importance": 0.5
+      },
+      {
+        "phase_index": 2,
+        "canonical_prompt": "external view of a white car turning left under a red sign with Chinese characters",
+        "hypotheses": [
+          "white car making a left turn on street",
+          "white vehicle turning with red signboard overhead"
+        ],
+        "scene_prompt": "street with red signboard",
+        "action_prompt": "white car turning left",
+        "objects": [
+          "white car",
+          "red sign",
+          "Chinese characters"
+        ],
+        "semantic_importance": 0.5
+      }
+    ],
+    "aspect_prompts": {
+      "global": "autonomous car turning right from inside view, then white car turning left outside under red Chinese sign",
+      "scene": "street, inside car, outdoor sign",
+      "action": "steering, turning left and right",
+      "object": "steering wheel, white car, red sign",
+      "attributes": "white car, red sign with 6 Chinese characters",
+      "relations": "white car UNDER red sign"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "vô lăng",
+        "canonical_en": "steering wheel",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "xe màu trắng",
+        "canonical_en": "white car",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "biển hiệu đỏ",
+        "canonical_en": "red sign",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  },
+  "9527e080a618c0298fd40a47f58dcf0e": {
+    "task_type": "QA",
+    "is_sequence": true,
+    "global_query_en": "cooking video where chef puts green peppercorns, lime leaves, and lemongrass inside the belly of four fish",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "person",
+        "attributes": {
+          "role": "chef"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E2",
+        "type": "object",
+        "attributes": {
+          "type": "fish"
+        },
+        "count": 4,
+        "is_hard_constraint": true
+      },
+      {
+        "entity_id": "E3",
+        "type": "object",
+        "attributes": {
+          "type": "spices",
+          "items": [
+            "green peppercorn",
+            "lime leaves",
+            "lemongrass"
+          ]
+        },
+        "count": 3,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "stuffing spices into fish belly",
+        "subject": "E1",
+        "object": "E2",
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "chef putting green peppercorns, lime leaves, and lemongrass into the belly of four fish",
+        "hypotheses": [
+          "chef stuffing spices into fish",
+          "preparing fish by filling ingredients inside"
+        ],
+        "scene_prompt": "kitchen",
+        "action_prompt": "stuffing ingredients into fish",
+        "objects": [
+          "fish",
+          "pepper",
+          "leaves",
+          "lemongrass"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "cooking video chef putting spices into fish belly",
+      "scene": "kitchen",
+      "action": "putting ingredients into fish",
+      "object": "fish, green peppercorn, lime leaves, lemongrass",
+      "attributes": "four fish",
+      "relations": "chef stuffing spices inside fish"
+    },
+    "source_grounding": [
+      {
+        "source_vi": "đầu bếp",
+        "canonical_en": "chef",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "tiêu xanh, lá chanh và sả",
+        "canonical_en": "green peppercorn, lime leaves, and lemongrass",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "4 con cá",
+        "canonical_en": "four fish",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
+  }
+}

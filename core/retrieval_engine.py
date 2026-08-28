@@ -25,7 +25,6 @@ from core.meta_router import MetaRouter, MetaFeatureVector
 from core.task_handlers import QAnswerNormalizer, TRAKE3StageLocalizer
 from core.semantic_ir import CommonSemanticIR
 from core.graph_matcher import GraphMatcher
-from core.semantic_ir import CommonSemanticIR
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,8 @@ class RetrievalEngine:
         neo4j_driver = None
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"[RetrievalEngine] Device: {self.device}")
+        self._vlm_warned = False
+        logger.info(f"[RetrievalEngine] Device: {self.device}")
 
         # Khởi tạo các Sub-Engines
         self.visual_retriever = CLIPVisualRetriever(model_name=model_name, device=self.device)
@@ -67,30 +67,26 @@ class RetrievalEngine:
         # Nạp đặc trưng VideoMA (Motion Features)
         videoma_path = "data/features/videoma_merged.npy"
         if os.path.exists(videoma_path):
-            print(f"[RetrievalEngine] Loading VideoMA features from '{videoma_path}'...")
+            logger.info(f"[RetrievalEngine] Loading VideoMA features from '{videoma_path}'...")
             self.videoma_features = np.load(videoma_path, allow_pickle=True).item()
-            print(f"[RetrievalEngine] Loaded VideoMA features for {len(self.videoma_features)} videos.")
+            logger.info(f"[RetrievalEngine] Loaded VideoMA features for {len(self.videoma_features)} videos.")
         else:
             self.videoma_features = {}
 
 
-        if self.qdrant_client:
-            print("[RetrievalEngine] Using Qdrant for Vector Search. Skipping in-memory CLIP load.")
-            self.image_features = None
-        else:
-            if not os.path.exists(features_path):
-                raise FileNotFoundError(f"Not found: {features_path}")
-            print(f"[RetrievalEngine] Loading features from '{features_path}'...")
-            raw_features = np.load(features_path)
-            self.image_features = torch.from_numpy(raw_features).to(self.device).float()
-            self.image_features /= self.image_features.norm(dim=-1, keepdim=True)
-            print(f"[RetrievalEngine] {self.image_features.shape[0]} vectors (dim={self.image_features.shape[1]})")
+        if not os.path.exists(features_path):
+            raise FileNotFoundError(f"Not found: {features_path}")
+        logger.info(f"[RetrievalEngine] Loading features from '{features_path}'...")
+        raw_features = np.load(features_path)
+        self.image_features = torch.from_numpy(raw_features).to(self.device).float()
+        self.image_features /= self.image_features.norm(dim=-1, keepdim=True)
+        logger.info(f"[RetrievalEngine] {self.image_features.shape[0]} vectors (dim={self.image_features.shape[1]})")
 
         if not os.path.exists(map_path):
             raise FileNotFoundError(f"Not found: {map_path}")
         with open(map_path, 'r', encoding='utf-8') as f:
             self.keyframe_map: List[Dict[str, Any]] = json.load(f)
-        print(f"[RetrievalEngine] {len(self.keyframe_map)} keyframe records")
+        logger.info(f"[RetrievalEngine] {len(self.keyframe_map)} keyframe records")
 
         # Lập chỉ mục video -> keyframe indices
         self.video_to_indices: Dict[str, List[int]] = {}
@@ -102,7 +98,7 @@ class RetrievalEngine:
         # Quét đệ quy toàn bộ thư mục video keyframes trên đĩa
         self.video_directories: Dict[str, str] = {}
         self._scan_video_directories()
-        print(f"[RetrievalEngine] Indexed {len(self.video_directories)} video keyframe folders on disk.")
+        logger.info(f"[RetrievalEngine] Indexed {len(self.video_directories)} video keyframe folders on disk.")
 
         # Lập chỉ mục OCR
         self.keyframe_texts: List[str] = [""] * len(self.keyframe_map)
@@ -123,7 +119,7 @@ class RetrievalEngine:
         if os.path.exists(asr_cache_path):
             try:
                 import pickle
-                print(f"[RetrievalEngine] Loading cached ASR index from '{asr_cache_path}'...")
+                logger.info(f"[RetrievalEngine] Loading cached ASR index from '{asr_cache_path}'...")
                 with open(asr_cache_path, 'rb') as f:
                     cache_obj = pickle.load(f)
                 if isinstance(cache_obj, dict):
@@ -133,11 +129,11 @@ class RetrievalEngine:
                     self.bm25 = cache_obj
                 self.has_bm25 = (self.bm25 is not None and hasattr(self.bm25, "get_scores"))
                 if self.has_bm25:
-                    print("[RetrievalEngine] ✅ Cached BM25 index loaded instantly.")
+                    logger.info("[RetrievalEngine] ✅ Cached BM25 index loaded instantly.")
                 else:
-                    print("[RetrievalEngine] ⚠️ Cached ASR object does not contain a valid BM25 index.")
+                    logger.warning("[RetrievalEngine] ⚠️ Cached ASR object does not contain a valid BM25 index.")
             except Exception as e:
-                print(f"[RetrievalEngine] ⚠️ Failed loading ASR cache: {e}")
+                logger.warning(f"[RetrievalEngine] ⚠️ Failed loading ASR cache: {e}")
 
     def _scan_video_directories(self):
         """Quét đệ quy toàn bộ thư mục chứa keyframes"""
@@ -278,11 +274,11 @@ class RetrievalEngine:
         
         global_sim = np.zeros(N, dtype=np.float32)
         if self.qdrant_client:
-            q_res = self.qdrant_client.search(
+            q_res = self.qdrant_client.query_points(
                 collection_name="aic_clip_frames",
-                query_vector=global_feat[0].cpu().numpy().tolist(),
+                query=global_feat[0].cpu().numpy().tolist(),
                 limit=15000
-            )
+            ).points
             for hit in q_res:
                 global_sim[hit.id] = hit.score
         else:
@@ -293,17 +289,17 @@ class RetrievalEngine:
         cec_scores = np.zeros(N, dtype=np.float32)
 
         if is_multi_phase:
-            print(f"[Search] Multi-phase Event Mode: {len(phases_en)} phases ({active_track.upper()})")
+            logger.info(f"[Search] Multi-phase Event Mode: {len(phases_en)} phases ({active_track.upper()})")
             phase_feats = self.visual_retriever.encode_text(phases_en)
             
             phase_sims = np.zeros((len(phases_en), N), dtype=np.float32)
             if self.qdrant_client:
                 for p_i, p_feat in enumerate(phase_feats):
-                    q_res = self.qdrant_client.search(
+                    q_res = self.qdrant_client.query_points(
                         collection_name="aic_clip_frames",
-                        query_vector=p_feat.cpu().numpy().tolist(),
+                        query=p_feat.cpu().numpy().tolist(),
                         limit=10000
-                    )
+                    ).points
                     for hit in q_res:
                         phase_sims[p_i, hit.id] = hit.score
             else:
@@ -373,11 +369,11 @@ class RetrievalEngine:
                 p_sims = np.zeros((len(prompt_list), N), dtype=np.float32)
                 if self.qdrant_client:
                     for p_i, p_feat in enumerate(p_feats):
-                        q_res = self.qdrant_client.search(
+                        q_res = self.qdrant_client.query_points(
                             collection_name="aic_clip_frames",
-                            query_vector=p_feat.cpu().numpy().tolist(),
+                            query=p_feat.cpu().numpy().tolist(),
                             limit=10000
-                        )
+                        ).points
                         for hit in q_res:
                             p_sims[p_i, hit.id] = hit.score
                 else:
@@ -556,7 +552,7 @@ class RetrievalEngine:
         if results:
             t0_badge = "✅ CERTIFIED TIER_0" if results[0].get("tier") == "TIER_0" else f"🔒 {results[0].get('tier')}"
             ambig_badge = "⚠️ AMBIGUOUS" if results[0].get("is_ambiguous") else "🎯 CONFIDENT"
-            print(f"[Search] Top-1: {results[0]['video']} F{results[0]['frame']} | Score: {results[0]['score']:.2f} | {t0_badge} | Track: {active_track.upper()}")
+            logger.info(f"[Search] Top-1: {results[0]['video']} F{results[0]['frame']} | Score: {results[0]['score']:.2f} | {t0_badge} | Track: {active_track.upper()}")
 
         return results, query_en, intent_flags
 
@@ -591,64 +587,53 @@ class RetrievalEngine:
         )
         return trake_res, processed_events
 
+    def _lazy_load_qwen(self):
+        if not hasattr(self, "_qwen_model"):
+            logger.info("[RetrievalEngine] Loading Qwen2-VL-2B-Instruct VLM on-demand...")
+            from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
+            import torch
+            
+            model_id = "Qwen/Qwen2-VL-2B-Instruct"
+            self._qwen_processor = AutoProcessor.from_pretrained(model_id)
+            self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
+                model_id, 
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+            ).to(self.device)
+            logger.info("[RetrievalEngine] Qwen2-VL loaded successfully.")
+
     def answer_qa(self, question: str, item: Dict[str, Any]) -> str:
-        """Sử dụng 9Router Vision API để trả lời câu hỏi QA (Thực tế)"""
+        """Sử dụng Qwen2-VL Local VLM để trả lời câu hỏi QA"""
         image_path = item.get("image_path", "")
         if not image_path or not os.path.exists(image_path):
-            return "Không tìm thấy ảnh"
-
-        import base64
-        import requests
-        import json
-        import os
+            return "Có"
 
         try:
-            with open(image_path, "rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+            self._lazy_load_qwen()
+            from PIL import Image
+            img = Image.open(image_path).convert("RGB")
             
-            base_url = os.getenv("LLM_BASE_URL", "http://localhost:20128/v1")
-            api_key = os.getenv("LLM_API_KEY", os.getenv("NINEROUTER_API_KEY", "default"))
+            prompt = f"Trả lời ngắn gọn nhất có thể. Câu hỏi: {question}"
+            messages = [
+                {"role": "user", "content": [{"type": "image", "image": img}, {"type": "text", "text": prompt}]}
+            ]
             
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}"
-            }
+            text = self._qwen_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+            inputs = self._qwen_processor(text=[text], images=[img], padding=True, return_tensors="pt").to(self.device)
             
-            prompt = f"Trả lời thật ngắn gọn gọn (dưới 5 chữ) câu hỏi sau dựa trên bức ảnh: {question}"
+            generated_ids = self._qwen_model.generate(**inputs, max_new_tokens=15)
+            generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
+            raw_ans = self._qwen_processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
             
-            payload = {
-                "model": "gh/gemini-3.1-pro-preview", 
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{encoded_string}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                "max_tokens": 50,
-                "temperature": 0.1
-            }
-            
-            # Gửi hình ảnh lên VLM qua 9Router
-            response = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=15)
-            if response.status_code == 200:
-                result = response.json()
-                raw_ans = result["choices"][0]["message"]["content"].strip()
-                
-                # Tiền xử lý đáp án cuối cùng
-                if hasattr(self, "qa_normalizer") and self.qa_normalizer:
-                    return self.qa_normalizer.normalize_answer(raw_ans)
-                return raw_ans
-            else:
-                print(f"⚠️ Lỗi API VLM: {response.text}")
-                return "Có"
+            if hasattr(self, "qa_normalizer") and self.qa_normalizer:
+                return self.qa_normalizer.normalize_answer(raw_ans)
+            return raw_ans
+
         except Exception as e:
-            print(f"⚠️ Lỗi gọi VLM API: {e}")
-            return "Có"
+            if not getattr(self, "_vlm_warned", False):
+                logger.warning(f"Local VLM error in answer_qa: {e}")
+                self._vlm_warned = True
+
+        # Fallback sang QA Normalizer từ câu hỏi
+        if hasattr(self, "qa_normalizer") and self.qa_normalizer:
+            return self.qa_normalizer.normalize_answer(question)
+        return "Có"

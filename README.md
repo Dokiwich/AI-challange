@@ -1,85 +1,87 @@
-# AIC Video Retrieval System 🎬🔍
+# 🎬 AIC 2026 Video Retrieval System V4.0 (Graph-Enhanced Architecture)
 
-Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ cuộc thi AI Challenge (AIC), xây dựng trên mô hình CLIP (Contrastive Language-Image Pre-training) cùng giao diện trực quan Streamlit.
-
----
-
-## 🌟 Tính Năng Chính
-- **Text Query Retrieval**: Tìm kiếm cảnh/khung hình (Keyframes) bằng câu lệnh tiếng Việt hoặc tiếng Anh (tự động dịch đa ngữ qua Deep Translator).
-- **Trực quan hóa kết quả (Streamlit Web UI)**: Hiển thị top-K keyframes, thông tin video, mốc thời gian (FPS/PTS), điểm tương đồng (Cosine Similarity).
-- **Multi-query & Batch Processing**: Tự động duyệt và xử lý các bộ đề thi (`.txt`, KIS, QA).
-- **Xuất file nộp bài chuẩn định dạng**: Hỗ trợ xuất file nộp bài định dạng CSV/TXT theo quy chuẩn của BTC.
-- **Tiện ích tải dữ liệu**: Hỗ trợ tải trực tiếp dữ liệu/keyframes từ Google Drive bằng `gdown`.
+Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ cuộc thi AI Challenge (AIC), xây dựng trên kiến trúc V4.0 kết hợp sức mạnh của VectorDB (Qdrant), GraphDB (Neo4j), và VLM (Qwen-VL). Hệ thống không chỉ "nhìn" bằng độ tương đồng ngữ nghĩa CLIP mà còn "hiểu" được ngữ cảnh, đếm được số lượng và theo vết đối tượng qua thời gian.
 
 ---
 
-## 📁 Cấu Trúc Dự Án
+## 🌟 Tính Năng & Công Nghệ Lõi (V4.0)
+
+1. **Neo4j Graph Database ("Hòa mạng" Chuỗi Sự Kiện)**
+   - Giải quyết bài toán suy luận đa thực thể và định vị chuỗi thời gian (TRAKE). Trình biên dịch Cypher ép buộc tính thứ tự (`e1.timestamp < e2.timestamp`) trả về danh sách `matched_timestamps` chính xác.
+2. **Qdrant VectorDB (Truy Xuất Tốc Độ Cao)**
+   - Lưu trữ vector nhúng của CLIP, xử lý tìm kiếm trên tập 50GB video siêu mượt, loại bỏ thắt cổ chai CPU/RAM của Numpy mảng truyền thống.
+3. **YOLOv8 & ByteTrack (Counting & Tracking)**
+   - Dữ liệu bounding box và tracking được nạp vào GraphDB, đè bẹp điểm yếu "mù đếm số" và định vị tuyệt đối của mô hình CLIP.
+4. **VideoMAE V2 (Video Context)**
+   - Trích xuất hành động liên tục, kết hợp sức mạnh với CLIP để phân tích ngữ cảnh tĩnh và động.
+5. **Qwen-VL & OpenRouter (Auto-QA & Semantic Query)**
+   - Giải lập QA tự động ghi đáp án vào CSV bằng mô hình `Qwen2-VL-2B-Instruct` ở local.
+   - Biên dịch cấu trúc ngữ nghĩa (Event Graph) miễn phí qua chuẩn API của OpenRouter (`google/gemma-4-26b-a4b-it:free`).
+
+---
+
+## 📁 Cấu Trúc Thư Mục (Directory Tree)
+
 ```text
-├── core/
-│   ├── retrieval_engine.py      # Module nạp đặc trưng, xử lý truy vấn CLIP
-│   └── submission_exporter.py   # Module xuất kết quả nộp bài chuẩn AIC
-├── utils/
-│   └── download_from_drive.py   # Công cụ tải & giải nén dữ liệu từ Google Drive
-├── app.py                       # Giao diện Web tương tác (Streamlit)
-├── build_dataset_map.py         # Script xây dựng bản đồ map keyframes
-├── extract_image_features.py    # Script trích xuất vector đặc trưng hình ảnh
-├── main_baseline.py             # Script baseline tìm kiếm cơ bản
-├── main_pipeline.py             # Pipeline tự động chạy các bộ đề thi
-├── requirements.txt             # Danh sách thư viện phụ thuộc
-├── .env.example                 # File cấu hình mẫu
-└── .gitignore                   # Cấu hình bỏ qua file nặng & thông tin bảo mật
+├── app.py                     # Giao diện Web Streamlit UI chính (Visual QA, KIS, TRAKE, Batch)
+├── main_pipeline.py           # CLI Pipeline chạy hàng loạt file đề thi (.txt) -> Tự động nén submission.zip
+├── evaluate_pipeline.py       # Script chấm điểm và phân tích hệ thống
+├── requirements.txt           # Danh sách thư viện (neo4j, qdrant-client, ultralytics...)
+├── submission/                # Nơi xuất kết quả nộp bài tự động
+├── de-thi/                    # Nơi để các file truy vấn .txt của BTC
+│
+├── core/                      # Trái tim của hệ thống (Core Engine V4)
+│   ├── retrieval_engine.py    # Điều phối 4 Track, nay tích hợp VLM QA Generator
+│   ├── base_retriever.py      # Load mô hình CLIP
+│   ├── query_compiler.py      # Biên dịch truy vấn bằng LLM
+│   ├── meta_router.py         # Định tuyến thông minh tới các Track
+│   ├── graph_matcher.py       # Trình biên dịch Neo4j Cypher ép buộc chuỗi thời gian cho TRAKE
+│   ├── evidence_engine.py     # Thẩm phán chứng cứ 3-Level Veto
+│   ├── temporal_alignment.py  # Thuật toán Skip-Aware Monotonic DP (Fallback)
+│   └── submission_exporter.py # Đóng gói kết quả thành CSV chuẩn BTC
+│
+└── utils/                     # Tiện ích
+    └── download_from_drive.py # Tool tải dữ liệu từ Google Drive
 ```
+
+*Lưu ý: Các đoạn script trích xuất dữ liệu gốc (`scripts/`) và thư mục `csv/` tạm đã được gộp và xóa đi nhằm làm sạch dự án cho giai đoạn truy vấn chính thức.*
 
 ---
 
 ## 🚀 Hướng Dẫn Cài Đặt & Chạy
 
-### 1. Cài đặt môi trường
+### 1. Cài đặt môi trường & Database
 Khuyến nghị sử dụng Python 3.9 - 3.11:
 ```bash
-# Tạo môi trường ảo
+# Tạo và kích hoạt môi trường ảo
 python -m venv .venv
+.\.venv\Scripts\activate
 
-# Kích hoạt môi trường ảo
-# Trên Windows:
-.venv\Scripts\activate
-# Trên Linux/macOS:
-source .venv/bin/activate
-
-# Cài đặt các thư viện
+# Cài đặt thư viện
 pip install -r requirements.txt
 ```
 
+**Khởi chạy Docker:**
+Yêu cầu bật Docker cục bộ để chạy hai database (cổng 7687 cho Neo4j và 6333 cho Qdrant).
+
 ### 2. Cấu hình file `.env`
-Tạo file `.env` từ file mẫu:
-```bash
-cp .env.example .env
+Thiết lập API Key OpenRouter để AI phân tích cấu trúc truy vấn:
+```env
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxx
+OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
 ```
 
 ### 3. Chuẩn bị dữ liệu
-Đặt các file dữ liệu (không đẩy lên GitHub vì dung lượng lớn) vào thư mục gốc:
-- `clip_features.npy`: File ma trận vector đặc trưng đã trích xuất.
-- `map_keyframes.json`: File danh sách đường dẫn tương ứng với vector.
-- `Keyframes_*`: Thư mục chứa ảnh keyframe.
+Các file đồ thị sự kiện đã được gộp lại tại `data/event_graph_merged_clean_395.csv`. Đảm bảo bạn đã tải bộ dữ liệu `clip_features.npy` và `map_keyframes.json` vào thư mục `data/`.
 
-Nếu cần tải từ Google Drive:
-```bash
-python utils/download_from_drive.py "<GOOGLE_DRIVE_URL_HOẶC_ID>"
-```
-
-### 4. Khởi chạy ứng dụng Web (Streamlit)
+### 4. Khởi chạy Pipeline và Ứng dụng
+**Mở Giao diện Web (Streamlit):**
 ```bash
 streamlit run app.py
 ```
 
-### 5. Chạy pipeline batch query
+**Chạy tự động (Batch Pipeline):**
 ```bash
-python main_pipeline.py --query-dir "THUNGHIEM-bo-de-thi" --top-k 100
+python main_pipeline.py --dir de-thi --engine_mode meta
 ```
-
----
-
-## 🔒 Lưu Ý Bảo Mật & Đẩy Lên GitHub
-- Tuyệt đối **không** push file `.env` chứa token/key cá nhân.
-- Không push các file dữ liệu lớn (`.npy`, `.pt`, `Keyframes_*`, `clip-features-*`) vì vượt quá giới hạn 100MB của GitHub.
-- Sử dụng file `.gitignore` đã được cấu hình sẵn trong repository.
+Hệ thống sẽ duyệt qua mọi file `.txt`, nội suy đề KIS/QA/TRAKE và nén kết quả vào `submission.zip`.

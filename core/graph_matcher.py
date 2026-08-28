@@ -45,15 +45,6 @@ class GraphMatcher:
             var_name = entity.entity_id.replace("-", "_")
             e_type = entity.entity_type
             match_clauses.append(f"MATCH (f)-[:CONTAINS]->({var_name}:Entity {{type: '{e_type}'}})")
-            
-            # Xử lý attributes
-            for k, v in entity.attributes.items():
-                if isinstance(v, bool):
-                    where_clauses.append(f"{var_name}.{k} = {str(v).lower()}")
-                elif isinstance(v, str):
-                    where_clauses.append(f"toLower({var_name}.{k}) = '{v.lower()}'")
-                elif isinstance(v, (int, float)):
-                    where_clauses.append(f"{var_name}.{k} = {v}")
 
         # 3. Xây dựng Event MATCH (Relations between entities)
         for event in ir.event_edges:

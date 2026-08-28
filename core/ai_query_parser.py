@@ -8,12 +8,13 @@ Tích hợp:
 """
 
 import os
+import time
 import json
 import re
 import logging
 import hashlib
 from typing import Dict, List, Any, Optional
-import requests
+import openai
 
 try:
     from dotenv import load_dotenv
@@ -39,7 +40,7 @@ CACHE_FILE = os.path.join(CACHE_DIR, "query_ai_cache.json")
 class AIQueryParser:
     """
     Track 2: AI Semantic Compiler V2:
-    Sử dụng LLM (9Router Proxy / OpenAI compatible) phân tích ngữ nghĩa 6D, sinh giả thuyết bị chặn.
+    Sử dụng Gemini API phân tích ngữ nghĩa 6D, sinh giả thuyết bị chặn.
     """
 
     SYSTEM_PROMPT = """You are an expert AI Video Retrieval & Keyframe Extraction query compiler for benchmark competitions (AIC / TRECVID / Video Browser Showdown).
@@ -108,16 +109,23 @@ You MUST return a single, valid JSON object matching this exact schema:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
         api_key: Optional[str] = None,
         model_name: Optional[str] = None
     ):
-        self.base_url = base_url or os.getenv("LLM_BASE_URL", "http://localhost:20128/v1").rstrip("/")
-        self.api_key = api_key or os.getenv("LLM_API_KEY", os.getenv("NINEROUTER_API_KEY", "default"))
-        self.model_name = model_name or os.getenv("LLM_MODEL", "gh/gpt-4o-mini")
+        self.api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self.model_name = model_name or os.getenv("OPENROUTER_MODEL", "google/gemma-4-26b-a4b-it:free")
+        
+        if self.api_key:
+            self.client = openai.OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.api_key,
+            )
+        else:
+            logger.warning("No API Key found for OpenRouter.")
+            self.client = None
         
         self.cache: Dict[str, Dict[str, Any]] = self._load_cache()
-        self._is_available: Optional[bool] = None
+        self._is_available: Optional[bool] = True
 
     def _load_cache(self) -> Dict[str, Dict[str, Any]]:
         os.makedirs(CACHE_DIR, exist_ok=True)
@@ -140,36 +148,12 @@ You MUST return a single, valid JSON object matching this exact schema:
         return hashlib.md5(query.strip().lower().encode("utf-8")).hexdigest()
 
     def check_connection(self, force: bool = False) -> bool:
-        """Kiểm tra kết nối tới 9Router/LLM endpoint"""
-        import time
-        now = time.time()
-        if not force and hasattr(self, "_last_conn_check") and (now - self._last_conn_check < 30.0) and (self._is_available is not None):
-            return self._is_available
-
-        self._last_conn_check = now
-        try:
-            url = f"{self.base_url}/models"
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            resp = requests.get(url, headers=headers, timeout=0.8)
-            self._is_available = resp.status_code == 200
-            return self._is_available
-        except Exception:
-            self._is_available = False
-            return False
+        """Kiểm tra kết nối tới OpenRouter"""
+        return True
 
     def get_available_models(self) -> List[str]:
-        """Lấy danh sách model từ 9Router"""
-        try:
-            url = f"{self.base_url}/models"
-            headers = {"Authorization": f"Bearer {self.api_key}"}
-            resp = requests.get(url, headers=headers, timeout=0.8)
-            if resp.status_code == 200:
-                data = resp.json().get("data", [])
-                models = [m["id"] for m in data if "id" in m]
-                return models
-        except Exception:
-            pass
-        return ["vip", "gh/gpt-4o-mini", "kr/auto"]
+        """Lấy danh sách model từ OpenRouter"""
+        return ["google/gemma-4-26b-a4b-it:free"]
 
     def parse_query_structured(self, query_text: str, filename: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
@@ -193,43 +177,54 @@ You MUST return a single, valid JSON object matching this exact schema:
         if self._is_available is None and not self.check_connection():
             return None
 
-        # 3. Gọi LLM API với temperature=0.05
-        url = f"{self.base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json"
-        }
+        # 3. Gọi OpenRouter API
+        if not self.api_key or not getattr(self, "client", None):
+            logger.error("Cannot parse query via OpenRouter. API key is missing.")
+            return None
 
         user_content = f"Query to analyze:\n\"\"\"{raw_query}\"\"\""
         if filename:
             user_content += f"\nFile context: {filename}"
 
-        payload = {
-            "model": self.model_name,
-            "messages": [
-                {"role": "system", "content": self.SYSTEM_PROMPT},
-                {"role": "user", "content": user_content}
-            ],
-            "temperature": 0.05,
-            "max_tokens": 1500
-        }
-
         try:
-            logger.info(f"Calling LLM ({self.model_name}) at {self.base_url}...")
-            resp = requests.post(url, headers=headers, json=payload, timeout=8.0)
-            if resp.status_code != 200:
-                logger.warning(f"LLM API error ({resp.status_code}): {resp.text[:200]}")
+            logger.info(f"Calling OpenRouter ({self.model_name})...")
+            
+            import time
+            response_text = None
+            for attempt in range(3):
+                try:
+                    completion = self.client.chat.completions.create(
+                        model=self.model_name,
+                        messages=[
+                            {"role": "system", "content": self.SYSTEM_PROMPT},
+                            {"role": "user", "content": user_content}
+                        ],
+                        response_format={"type": "json_object"},
+                        temperature=0.05
+                    )
+                    response_text = completion.choices[0].message.content
+                    break
+                except Exception as e:
+                    if "429" in str(e) and attempt < 2:
+                        logger.warning("Quota/Rate limit hit in parser. Waiting 15s before retry...")
+                        time.sleep(15)
+                        continue
+                    raise e
+            
+            if not response_text:
+                logger.warning("Empty response from OpenRouter.")
                 return None
+                
+            # Clean JSON if wrapped in markdown
+            response_text = response_text.strip()
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
 
-            data = resp.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-
-            # Clean JSON markdown
-            clean_json_str = re.sub(r"^```json\s*", "", content, flags=re.IGNORECASE)
-            clean_json_str = re.sub(r"^```\s*", "", clean_json_str)
-            clean_json_str = re.sub(r"\s*```$", "", clean_json_str).strip()
-
-            parsed = json.loads(clean_json_str)
+            parsed = json.loads(response_text)
 
             # Validate basic keys
             if "temporal_phases" in parsed or "global_query_en" in parsed:
@@ -238,11 +233,8 @@ You MUST return a single, valid JSON object matching this exact schema:
                 self._save_cache()
                 return parsed
 
-        except requests.RequestException as e:
-            self._is_available = False
-            logger.debug(f"Network error calling LLM API: {e}")
         except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse LLM JSON response: {e}")
+            logger.warning(f"Failed to parse LLM JSON response: {e}\nResponse was: {response_text}")
         except Exception as e:
             logger.warning(f"Unexpected error in AIQueryParser: {e}")
 

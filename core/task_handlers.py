@@ -74,6 +74,8 @@ class TRAKE3StageLocalizer:
         """
         S = event_embeddings.shape[0]
         # Stage 1: Coarse Scoring
+        if image_features.dtype != event_embeddings.dtype or image_features.device != event_embeddings.device:
+            image_features = image_features.to(device=event_embeddings.device, dtype=event_embeddings.dtype)
         sim_matrix = (event_embeddings @ image_features.T)
         candidate_videos = set()
         video_scores = {}
