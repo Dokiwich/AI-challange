@@ -61,8 +61,8 @@ class RetrievalEngine:
         self.neo4j_driver = neo4j_driver
         self.graph_matcher = GraphMatcher(neo4j_driver=neo4j_driver)
         
-        # Tích hợp Qdrant Vector DB
-        self.qdrant_client = qdrant_client
+        # Tích hợp Qdrant Vector DB (Tắt để tránh lỗi cắt xén top-K làm mất vật thể hiếm)
+        self.qdrant_client = None
 
         # Nạp đặc trưng VideoMA (Motion Features)
         videoma_path = "data/features/videoma_merged.npy"
@@ -273,16 +273,8 @@ class RetrievalEngine:
         global_feat = self.visual_retriever.encode_text([global_text])
         
         global_sim = np.zeros(N, dtype=np.float32)
-        if self.qdrant_client:
-            q_res = self.qdrant_client.query_points(
-                collection_name="aic_clip_frames",
-                query=global_feat[0].cpu().numpy().tolist(),
-                limit=15000
-            ).points
-            for hit in q_res:
-                global_sim[hit.id] = hit.score
-        else:
-            global_sim = self.visual_retriever.compute_similarity(global_feat, self.image_features)[0]
+        # Tính toán Global Sim bằng Tensor nguyên bản (tránh truncation của Qdrant)
+        global_sim = self.visual_retriever.compute_similarity(global_feat, self.image_features)[0]
 
         is_multi_phase = len(phases_en) > 1 and intent_flags.get("is_sequence", False)
         seq_bonus = np.zeros(N, dtype=np.float32)
@@ -293,17 +285,23 @@ class RetrievalEngine:
             phase_feats = self.visual_retriever.encode_text(phases_en)
             
             phase_sims = np.zeros((len(phases_en), N), dtype=np.float32)
-            if self.qdrant_client:
-                for p_i, p_feat in enumerate(phase_feats):
-                    q_res = self.qdrant_client.query_points(
-                        collection_name="aic_clip_frames",
-                        query=p_feat.cpu().numpy().tolist(),
-                        limit=10000
-                    ).points
-                    for hit in q_res:
-                        phase_sims[p_i, hit.id] = hit.score
-            else:
-                phase_sims = self.visual_retriever.compute_similarity(phase_feats, self.image_features)
+            # Tính toán Phase Sims bằng Tensor
+            phase_sims = self.visual_retriever.compute_similarity(phase_feats, self.image_features)
+            
+            # Khai thác Aspect (Đặc biệt là Object) để bổ trợ CLIP tìm vật thể hiếm (như tê giác)
+            aspect_list = []
+            for k in ["object", "action"]:
+                val = aspect_prompts.get(k)
+                if val:
+                    # Tách các object/action bằng dấu phẩy để CLIP tập trung vào từng thực thể
+                    parts = [p.strip() for p in val.split(",")]
+                    aspect_list.extend([p for p in parts if len(p) > 2])
+            
+            aspect_bonus = np.zeros(N, dtype=np.float32)
+            if aspect_list:
+                a_feats = self.visual_retriever.encode_text(aspect_list)
+                a_sims = self.visual_retriever.compute_similarity(a_feats, self.image_features)
+                aspect_bonus = np.max(a_sims, axis=0)
 
             # Lấy Union Candidates từ Top frames của từng pha + Top Global
             candidate_videos = set()
@@ -362,15 +360,17 @@ class RetrievalEngine:
                             smoothed_seq[gi] = (0.4 * v_seq[li]) + (0.6 * v_seq_smooth[li])
                 seq_bonus = smoothed_seq
 
-            # Fusion cân bằng: 70% Global Holistic + 15% Max Phase + 15% DP Sequence
+            # Fusion cân bằng để chống hiện tượng Bag-of-Words che khuất vật thể hiếm
             max_phase_sim = np.max(phase_sims, axis=0)
-            visual_scores = (global_sim * 0.70) + (max_phase_sim * 0.15) + (seq_bonus * 0.15)
+            visual_scores = (global_sim * 0.40) + (aspect_bonus * 0.20) + (max_phase_sim * 0.25) + (seq_bonus * 0.15)
         else:
             # Single-Span / Holistic Mode
             prompt_list = [global_text]
             for k in ["action", "object", "scene"]:
-                if aspect_prompts.get(k) and aspect_prompts[k] != global_text:
-                    prompt_list.append(aspect_prompts[k])
+                val = aspect_prompts.get(k)
+                if val and val != global_text:
+                    parts = [p.strip() for p in val.split(",")]
+                    prompt_list.extend([p for p in parts if len(p) > 2])
 
             if len(prompt_list) > 1:
                 p_feats = self.visual_retriever.encode_text(prompt_list)
