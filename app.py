@@ -7,6 +7,7 @@ from PIL import Image
 
 from core.retrieval_engine import RetrievalEngine
 from core.submission_exporter import SubmissionExporter
+from core.query_compiler import QueryCompiler
 from qdrant_client import QdrantClient
 from neo4j import GraphDatabase
 import logging
@@ -516,18 +517,12 @@ elif query_mode == "TRAKE":
         trake_search_ai = False
 
     if do_trake and trake_text.strip():
-        lines = [l.strip() for l in trake_text.split("\n") if l.strip()]
-        event_queries = [
-            re.sub(r"^E\d+[:.]\s*", "", l, flags=re.IGNORECASE)
-            for l in lines if re.match(r"^E\d+[:.]", l, re.IGNORECASE)
-        ]
-        if not event_queries:
-            event_queries = lines[1:] if len(lines) > 1 else lines
+        event_queries = QueryCompiler.parse_trake_events(trake_text)
 
-        with st.spinner("Đang thực thi 3-Stage Temporal Refinement..."):
+        with st.spinner(f"Đang thực thi 3-Stage Temporal Refinement cho {len(event_queries)} sự kiện..."):
             trake_res, proc_events = engine.search_trake(
                 event_queries,
-                top_k_videos=10,
+                top_k_videos=100,
                 video_filter=v_filter,
                 auto_translate=auto_translate,
                 use_ai_query=trake_search_ai

@@ -18,37 +18,33 @@ class QAnswerNormalizer:
     def normalize_answer(raw_answer: str, expected_type: Optional[str] = None) -> str:
         """Chuẩn hóa đáp án loại bỏ từ thừa, mạo từ và khoảng trắng"""
         if not raw_answer:
-            return "yes"
+            return "Có"
 
-        ans = raw_answer.strip().lower()
-        ans = re.sub(r'^(the answer is|it is|i think it is|có|đáp án là)\s*', '', ans, flags=re.IGNORECASE)
+        ans = raw_answer.strip()
+        ans = re.sub(r'^(the answer is|it is|i think it is|đáp án là|câu trả lời là|kết quả là)\s*[:.]?\s*', '', ans, flags=re.IGNORECASE)
         ans = re.sub(r'^(a|an|the)\s+', '', ans, flags=re.IGNORECASE)
-        ans = ans.strip(' .!?,;:"\'')
+        ans = ans.strip(' .!?,;:"\'\n\r\t')
+
+        if not ans or ans in ["0", "unknown", "none", "null"]:
+            return "Có"
 
         # Chuẩn hóa Boolean yes/no
-        if ans in ["yes", "có", "true", "đúng", "chính xác"]:
-            return "yes"
-        if ans in ["no", "không", "false", "sai"]:
-            return "no"
+        ans_lower = ans.lower()
+        if ans_lower in ["yes", "true", "đúng", "chính xác"]:
+            return "Có"
+        if ans_lower in ["no", "false", "sai"]:
+            return "Không"
 
-        # Chuẩn hóa số
+        # Chuẩn hóa số chữ sang số tự nhiên
         num_map = {
             "một": "1", "hai": "2", "ba": "3", "bốn": "4", "năm": "5",
             "sáu": "6", "bảy": "7", "tám": "8", "chín": "9", "mười": "10",
             "one": "1", "two": "2", "three": "3", "four": "4", "five": "5"
         }
-        if ans in num_map:
-            return num_map[ans]
+        if ans_lower in num_map:
+            return num_map[ans_lower]
 
-        # Chuẩn hóa màu sắc
-        color_map = {
-            "đỏ": "red", "xanh": "blue", "vàng": "yellow", "trắng": "white",
-            "đen": "black", "cam": "orange", "hồng": "pink", "xám": "gray"
-        }
-        if ans in color_map:
-            return color_map[ans]
-
-        return ans if ans else "yes"
+        return ans if ans else "Có"
 
 
 class TRAKE3StageLocalizer:
@@ -64,7 +60,7 @@ class TRAKE3StageLocalizer:
         image_features: Any,
         keyframe_map: List[Dict[str, Any]],
         video_to_indices: Dict[str, List[int]],
-        top_k_videos: int = 10
+        top_k_videos: int = 100
     ) -> List[Dict[str, Any]]:
         """
         Quy trình 3 giai đoạn định vị thời gian:
@@ -80,15 +76,16 @@ class TRAKE3StageLocalizer:
         candidate_videos = set()
         video_scores = {}
 
-        coarse_k = min(250, image_features.shape[0])
+        coarse_k = min(1500, image_features.shape[0])
         for s_idx in range(S):
             top_val, top_idx = sim_matrix[s_idx].topk(coarse_k)
             for v, idx in zip(top_val.tolist(), top_idx.tolist()):
                 vname = keyframe_map[idx].get("video") or keyframe_map[idx].get("video_name")
-                candidate_videos.add(vname)
-                video_scores[vname] = video_scores.get(vname, 0.0) + v
+                if vname:
+                    candidate_videos.add(vname)
+                    video_scores[vname] = video_scores.get(vname, 0.0) + v
 
-        top_candidates = sorted(candidate_videos, key=lambda x: video_scores[x], reverse=True)[:top_k_videos * 2]
+        top_candidates = sorted(candidate_videos, key=lambda x: video_scores[x], reverse=True)[:top_k_videos * 3]
 
         # Stage 2 & 3: Monotonic DP + Local Refinement per candidate video
         trake_results = []

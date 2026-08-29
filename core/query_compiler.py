@@ -31,6 +31,36 @@ class QueryCompiler:
         self.ai_parser = ai_parser if ai_parser else AIQueryParser()
         self._trans_cache: Dict[str, str] = {}
 
+    @staticmethod
+    def parse_trake_events(content: str) -> List[str]:
+        """
+        Phân tách chính xác chuỗi sự kiện trong file đề thi TRAKE.
+        Hỗ trợ tiền tố: E1, Event 1, Cảnh 1, Khoảnh khắc 1, Giai đoạn 1, Bước 1, Phase 1, (1), 1., 1:, 1 -
+        Tự động loại bỏ câu mô tả mở đầu (intro).
+        """
+        lines = [l.strip() for l in content.split("\n") if l.strip()]
+        if not lines:
+            return []
+
+        pattern = r"^(?:E\d+|Event\s*\d+|Cảnh\s*\d+|Khoảnh khắc\s*\d+|Giai đoạn\s*\d+|Bước\s*\d+|Phase\s*\d+|\(\d+\)|\d+[\.:\-])\s*[:.]?\s*"
+        
+        extracted = []
+        for l in lines:
+            if re.match(pattern, l, flags=re.IGNORECASE):
+                cleaned = re.sub(pattern, "", l, flags=re.IGNORECASE).strip()
+                if cleaned:
+                    extracted.append(cleaned)
+        
+        if extracted:
+            return extracted
+        
+        # Nếu không có tiền tố tường minh, kiểm tra nếu dòng đầu là giới thiệu
+        first_line = lines[0].lower()
+        if len(lines) > 1 and any(kw in first_line for kw in ["chuỗi", "cảnh", "liên tiếp", "khoảnh khắc", "video về", "đây là", "gồm"]):
+            return lines[1:]
+        
+        return lines
+
     def compile_offline_v2(
         self,
         raw_query: str,

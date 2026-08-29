@@ -352,6 +352,15 @@ class RetrievalEngine:
 
             if seq_bonus.max() > 0:
                 seq_bonus = seq_bonus / seq_bonus.max()
+                # Smooth seq_bonus so the sequence path lifts its neighbors (tạo chuỗi)
+                smoothed_seq = np.zeros_like(seq_bonus)
+                for vname, v_indices in self.video_to_indices.items():
+                    v_seq = seq_bonus[v_indices]
+                    if v_seq.max() > 0:
+                        v_seq_smooth = self.temporal_engine.gaussian_smoothing(v_seq, window_size=11, sigma=3.0)
+                        for li, gi in enumerate(v_indices):
+                            smoothed_seq[gi] = (0.4 * v_seq[li]) + (0.6 * v_seq_smooth[li])
+                seq_bonus = smoothed_seq
 
             # Fusion cân bằng: 70% Global Holistic + 15% Max Phase + 15% DP Sequence
             max_phase_sim = np.max(phase_sims, axis=0)
@@ -384,6 +393,24 @@ class RetrievalEngine:
             else:
                 visual_scores = global_sim
             cec_scores = visual_scores
+
+        # 5.5 Adaptive Visual Temporal Smoothing (Bảo toàn đỉnh nhọn cho truy vấn chớp nhoáng)
+        smoothed_visual = np.zeros_like(visual_scores)
+        is_seq = intent_flags.get("is_sequence", False)
+        
+        # Cấu hình làm mịn linh hoạt theo loại truy vấn
+        win_size = 15 if is_seq else 5
+        sig = 4.0 if is_seq else 1.0
+        smooth_weight = 0.60 if is_seq else 0.15
+        
+        for vname, v_indices in self.video_to_indices.items():
+            v_scores = visual_scores[v_indices]
+            if len(v_scores) > 0 and v_scores.max() > 0:
+                v_smoothed = self.temporal_engine.gaussian_smoothing(v_scores, window_size=win_size, sigma=sig)
+                v_hybrid = ((1.0 - smooth_weight) * v_scores) + (smooth_weight * v_smoothed)
+                for li, gi in enumerate(v_indices):
+                    smoothed_visual[gi] = v_hybrid[li]
+        visual_scores = smoothed_visual
 
         # 6. ASR Scoring (BM25 + Gaussian Smoothing)
         audio_scores = np.zeros(N, dtype=np.float32)
@@ -587,44 +614,100 @@ class RetrievalEngine:
         )
         return trake_res, processed_events
 
+    # ======================================================================
+    # GPU MEMORY MANAGEMENT (Phase-Shifting Architecture)
+    # ======================================================================
+
+    def unload_clip(self):
+        """Giải phóng CLIP và image_features khỏi GPU để nhường VRAM cho VLM."""
+        if hasattr(self, 'image_features') and self.image_features is not None:
+            self.image_features = self.image_features.cpu()
+        if hasattr(self, 'visual_retriever') and hasattr(self.visual_retriever, 'model'):
+            self.visual_retriever.model = self.visual_retriever.model.cpu()
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        logger.info("[RetrievalEngine] CLIP unloaded from GPU. VRAM freed.")
+
+    def reload_clip(self):
+        """Nạp lại CLIP lên GPU sau khi VLM hoàn tất."""
+        if hasattr(self, 'image_features') and self.image_features is not None:
+            self.image_features = self.image_features.to(self.device).float()
+        if hasattr(self, 'visual_retriever') and hasattr(self.visual_retriever, 'model'):
+            self.visual_retriever.model = self.visual_retriever.model.to(self.device)
+        logger.info("[RetrievalEngine] CLIP reloaded to GPU.")
+
+    def unload_qwen(self):
+        """Giải phóng Qwen2-VL khỏi GPU."""
+        if hasattr(self, '_qwen_model'):
+            del self._qwen_model
+        if hasattr(self, '_qwen_processor'):
+            del self._qwen_processor
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        logger.info("[RetrievalEngine] Qwen2-VL unloaded from GPU. VRAM freed.")
+
+    # ======================================================================
+    # VLM INFERENCE (Dual-Vision Dynamic Tiling)
+    # ======================================================================
+
     def _lazy_load_qwen(self):
         if not hasattr(self, "_qwen_model"):
             logger.info("[RetrievalEngine] Loading Qwen2-VL-2B-Instruct VLM on-demand...")
             from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-            import torch
-            
-            model_id = "Qwen/Qwen2-VL-2B-Instruct"
-            self._qwen_processor = AutoProcessor.from_pretrained(model_id)
+            self._qwen_processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
             self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                model_id, 
+                "Qwen/Qwen2-VL-2B-Instruct",
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
             ).to(self.device)
             logger.info("[RetrievalEngine] Qwen2-VL loaded successfully.")
 
+    def _build_dual_vision_images(self, img: Image.Image) -> List[Image.Image]:
+        """Dual-Vision: ảnh bối cảnh thu nhỏ + ảnh crop trung tâm sắc nét."""
+        context_img = img.resize((224, 224), Image.LANCZOS)
+        w, h = img.size
+        crop_size = min(416, w, h)
+        left = (w - crop_size) // 2
+        top = (h - crop_size) // 2
+        detail_img = img.crop((left, top, left + crop_size, top + crop_size))
+        return [context_img, detail_img]
+
     def answer_qa(self, question: str, item: Dict[str, Any]) -> str:
-        """Sử dụng Qwen2-VL Local VLM để trả lời câu hỏi QA"""
+        """Trả lời QA bằng Qwen2-VL với chiến thuật Dual-Vision."""
         image_path = item.get("image_path", "")
         if not image_path or not os.path.exists(image_path):
             return "Có"
 
         try:
             self._lazy_load_qwen()
-            from PIL import Image
             img = Image.open(image_path).convert("RGB")
-            
-            prompt = f"Trả lời ngắn gọn nhất có thể. Câu hỏi: {question}"
-            messages = [
-                {"role": "user", "content": [{"type": "image", "image": img}, {"type": "text", "text": prompt}]}
+            dual_imgs = self._build_dual_vision_images(img)
+
+            prompt = (
+                "Image 1 is the full scene for context. "
+                "Image 2 is a close-up crop for detail. "
+                f"Answer as briefly as possible. Question: {question}"
+            )
+            content = [
+                {"type": "image", "image": dual_imgs[0]},
+                {"type": "image", "image": dual_imgs[1]},
+                {"type": "text", "text": prompt}
             ]
-            
+            messages = [{"role": "user", "content": content}]
+
             text = self._qwen_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            inputs = self._qwen_processor(text=[text], images=[img], padding=True, return_tensors="pt").to(self.device)
-            
-            generated_ids = self._qwen_model.generate(**inputs, max_new_tokens=15)
-            generated_ids_trimmed = [out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-            raw_ans = self._qwen_processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-            
-            if hasattr(self, "qa_normalizer") and self.qa_normalizer:
+            inputs = self._qwen_processor(text=[text], images=dual_imgs, padding=True, return_tensors="pt").to(self.device)
+
+            generated_ids = self._qwen_model.generate(**inputs, max_new_tokens=20)
+            generated_ids_trimmed = [
+                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+            ]
+            raw_ans = self._qwen_processor.batch_decode(
+                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            )[0]
+
+            if self.qa_normalizer:
                 return self.qa_normalizer.normalize_answer(raw_ans)
             return raw_ans
 
@@ -633,7 +716,6 @@ class RetrievalEngine:
                 logger.warning(f"Local VLM error in answer_qa: {e}")
                 self._vlm_warned = True
 
-        # Fallback sang QA Normalizer từ câu hỏi
-        if hasattr(self, "qa_normalizer") and self.qa_normalizer:
+        if self.qa_normalizer:
             return self.qa_normalizer.normalize_answer(question)
         return "Có"

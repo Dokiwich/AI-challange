@@ -3377,5 +3377,71 @@
     "hard_anchors": [],
     "has_speech": false,
     "speech_keywords": []
+  },
+  "18e7b4ec019cbd60e333d7086edb7db6": {
+    "task_type": "KIS",
+    "is_sequence": false,
+    "global_query_en": "a yellow cat sleeping",
+    "entities": [
+      {
+        "entity_id": "E1",
+        "type": "animal",
+        "attributes": {
+          "color": "yellow",
+          "species": "cat"
+        },
+        "count": 1,
+        "is_hard_constraint": true
+      }
+    ],
+    "events": [
+      {
+        "event_id": "EV1",
+        "action": "sleeping",
+        "subject": "E1",
+        "object": null,
+        "phase_index": 1
+      }
+    ],
+    "temporal_edges": [],
+    "temporal_phases": [
+      {
+        "phase_index": 1,
+        "canonical_prompt": "a yellow cat sleeping",
+        "hypotheses": [
+          "a ginger cat sleeping",
+          "a yellow kitten sleeping"
+        ],
+        "scene_prompt": null,
+        "action_prompt": "sleeping",
+        "objects": [
+          "cat"
+        ],
+        "semantic_importance": 1.0
+      }
+    ],
+    "aspect_prompts": {
+      "global": "a yellow cat sleeping",
+      "scene": null,
+      "action": "sleeping",
+      "object": "cat",
+      "attributes": "yellow",
+      "relations": null
+    },
+    "source_grounding": [
+      {
+        "source_vi": "một chú mèo vàng",
+        "canonical_en": "a yellow cat",
+        "source_type": "explicit"
+      },
+      {
+        "source_vi": "đang ngủ",
+        "canonical_en": "sleeping",
+        "source_type": "explicit"
+      }
+    ],
+    "hard_anchors": [],
+    "has_speech": false,
+    "speech_keywords": []
   }
 }
