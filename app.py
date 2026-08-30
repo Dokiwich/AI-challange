@@ -20,11 +20,15 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AIC 2026 Video Retrieval", layout="wide", initial_sidebar_state="expanded")
 
-_ENGINE_VERSION = 15
+_ENGINE_VERSION = 16
 if st.session_state.get("_engine_ver") != _ENGINE_VERSION:
     for k in [k for k in st.session_state if k.startswith(("kis_", "qa_", "trake_"))]:
         del st.session_state[k]
     st.session_state["_engine_ver"] = _ENGINE_VERSION
+    st.session_state["submission_cart"] = {}
+
+if "submission_cart" not in st.session_state:
+    st.session_state["submission_cart"] = {}
 
 @st.cache_resource(show_spinner="Loading CLIP model and 4-Track Vector Database...")
 def get_engine(version=_ENGINE_VERSION):
@@ -55,6 +59,88 @@ def get_engine(version=_ENGINE_VERSION):
 engine = get_engine()
 exporter = SubmissionExporter()
 extracted_videos = engine.get_extracted_videos()
+
+def get_current_rank(video, frame, event_idx=0, is_trake=False):
+    cart = st.session_state.get("submission_cart", {})
+    for r, item in cart.items():
+        if is_trake:
+            if item["video"] == video and item.get("frames", {}).get(event_idx) == frame:
+                return r
+        else:
+            if item["video"] == video and item.get("frame") == frame:
+                return r
+    return 0
+
+def update_cart(video, frame, target_rank: int, event_idx=0, is_trake=False):
+    cart = st.session_state.get("submission_cart", {})
+    curr_rank = get_current_rank(video, frame, event_idx, is_trake)
+    
+    if target_rank == 0:
+        if curr_rank > 0:
+            if is_trake:
+                if event_idx in cart[curr_rank].get("frames", {}):
+                    del cart[curr_rank]["frames"][event_idx]
+                if not cart[curr_rank]["frames"]:
+                    del cart[curr_rank]
+            else:
+                del cart[curr_rank]
+            st.toast(f"🗑️ Đã xóa F{frame} khỏi giỏ.")
+        else:
+            next_r = 1
+            if cart: next_r = max(cart.keys()) + 1
+            if next_r > 100: next_r = 100
+            
+            if is_trake:
+                cart[next_r] = {"video": video, "frames": {event_idx: frame}, "score": 1.0}
+            else:
+                cart[next_r] = {"video": video, "frame": frame, "score": 1.0}
+            st.toast(f"✅ Đã thêm F{frame} vào Top {next_r}")
+    else:
+        if curr_rank > 0 and curr_rank != target_rank:
+            if is_trake:
+                if event_idx in cart[curr_rank].get("frames", {}):
+                    del cart[curr_rank]["frames"][event_idx]
+                if not cart[curr_rank]["frames"]:
+                    del cart[curr_rank]
+            else:
+                del cart[curr_rank]
+                
+        if is_trake:
+            if target_rank in cart:
+                if cart[target_rank]["video"] != video:
+                    st.toast(f"⚠️ Top {target_rank} bị đổi Video: {cart[target_rank]['video']} ➔ {video}!")
+                    cart[target_rank] = {"video": video, "frames": {event_idx: frame}, "score": 1.0}
+                else:
+                    if event_idx in cart[target_rank].get("frames", {}) and cart[target_rank]["frames"][event_idx] != frame:
+                        st.toast(f"⚠️ Event {event_idx+1} của Top {target_rank} bị ghi đè!")
+                    if "frames" not in cart[target_rank]: cart[target_rank]["frames"] = {}
+                    cart[target_rank]["frames"][event_idx] = frame
+            else:
+                cart[target_rank] = {"video": video, "frames": {event_idx: frame}, "score": 1.0}
+        else:
+            if target_rank in cart and (cart[target_rank]["video"] != video or cart[target_rank].get("frame") != frame):
+                st.toast(f"⚠️ Vị trí Top {target_rank} đã bị ghi đè!")
+            cart[target_rank] = {"video": video, "frame": frame, "score": 1.0}
+        
+    st.session_state["submission_cart"] = cart
+
+def render_pick_ui(unique_key: str, video: str, frame: int, event_idx=0, is_trake=False):
+    c1, c2 = st.columns([2, 1])
+    curr_r = get_current_rank(video, frame, event_idx, is_trake)
+    
+    with c1:
+        rank_val = st.number_input("Hạng", min_value=0, max_value=100, value=curr_r, label_visibility="collapsed", key=f"num_{unique_key}")
+    with c2:
+        btn_label = "OK" if curr_r == 0 else "Sửa/Xóa"
+        if st.button(btn_label, key=f"btn_{unique_key}", use_container_width=True):
+            update_cart(video, frame, rank_val, event_idx, is_trake)
+            st.rerun()
+
+def render_temporal_browsing(unique_key: str, video_name: str, center_frame: int):
+    if st.button("[🔎] Duyệt lân cận", key=f"btn_browse_{unique_key}", use_container_width=True):
+        st.session_state["browsing_video"] = video_name
+        st.session_state["browsing_center_frame"] = center_frame
+        st.rerun()
 
 # =========================================================================
 # SIDEBAR CONTROLLER
@@ -142,6 +228,33 @@ st.sidebar.markdown("---")
 st.sidebar.text(f"Device: {engine.device}")
 st.sidebar.text(f"Keyframes: {len(engine.keyframe_map):,}")
 
+# --- GIỎ HÀNG ĐÁP ÁN (SUBMISSION CART) ---
+st.sidebar.markdown("---")
+st.sidebar.markdown("### [Cart] Giỏ hàng (Chốt Hạng)")
+cart_items = st.session_state.get("submission_cart", {})
+if not cart_items:
+    st.sidebar.caption("Chưa chốt hạng nào.")
+else:
+    for rank in sorted(cart_items.keys()):
+        item = cart_items[rank]
+        if "frames" in item:
+            f_str = ", ".join([f"E{e+1}:F{f}" for e, f in sorted(item["frames"].items())])
+            st.sidebar.text(f"🔒 Top {rank}: {item['video']}\n    ↳ {f_str}")
+        else:
+            st.sidebar.text(f"🔒 Top {rank}: {item['video']} - F{item.get('frame', 0)}")
+    
+    col_c1, col_c2 = st.sidebar.columns(2)
+    with col_c1:
+        if st.button("[X] Xóa hết", use_container_width=True):
+            st.session_state["submission_cart"] = {}
+            st.rerun()
+    with col_c2:
+        cart_sub_fn = st.text_input("Tên file CSV:", value="my_submission.csv", label_visibility="collapsed")
+        if st.button("[Export] Xuất CSV", type="primary", use_container_width=True):
+            ai_res = st.session_state.get("kis_results", [])
+            p = exporter.export_kis(ai_res, cart_items, cart_sub_fn, max_rows=100)
+            st.sidebar.success(f"Đã lưu: {p}")
+
 # =========================================================================
 # HEADER
 # =========================================================================
@@ -151,6 +264,50 @@ st.caption("Industrial-Grade Multimodal Video Retrieval with 4-Track Adaptive Me
 test_files = sorted(glob.glob(os.path.join("de-thi", "*.txt"))) + sorted(glob.glob(os.path.join("THUNGHIEM-bo-de-thi", "*.txt")))
 test_files = [f for f in test_files if "requirement" not in f.lower()]
 v_filter = list(extracted_videos) if filter_extracted else None
+
+# =========================================================================
+# TAB DUYỆT LÂN CẬN (TEMPORAL BROWSING VIEW)
+# =========================================================================
+if st.session_state.get("browsing_video"):
+    v_name = st.session_state["browsing_video"]
+    c_frame = st.session_state["browsing_center_frame"]
+    
+    st.markdown(f"## [🔎] Duyệt lân cận: `{v_name}`")
+    st.caption(f"Đang hiển thị các khung hình xung quanh tâm **F{c_frame}**.")
+    
+    if st.button("🔙 Quay lại kết quả tìm kiếm", type="primary"):
+        st.session_state["browsing_video"] = None
+        st.session_state["browsing_center_frame"] = None
+        st.rerun()
+        
+    st.divider()
+    
+    adj_items = engine.get_adjacent_keyframes(v_name, c_frame, radius=50)
+    if not adj_items:
+        st.warning("Không tìm thấy khung hình.")
+    else:
+        # Render ảnh theo cột (grid 3 cột kéo dọc)
+        b_cols = st.columns(3)
+        for i, item in enumerate(adj_items):
+            with b_cols[i % 3]:
+                is_center = (item["frame"] == c_frame)
+                mark = "⭐ " if is_center else ""
+                border_color = "red" if is_center else "gray"
+                st.markdown(f"{mark}**F{item['frame']}** (t={item['pts_time']:.1f}s)")
+                
+                if item["image_path"] and os.path.exists(item["image_path"]):
+                    st.image(Image.open(item["image_path"]), use_container_width=True)
+                else:
+                    st.text("No image")
+                    
+                render_pick_ui(f"pick_br_{item['frame']}", v_name, item['frame'], is_trake=(query_mode == "TRAKE"))
+            
+            # Cứ 3 ảnh thì vẽ 1 dải phân cách cho dễ nhìn
+            if (i + 1) % 3 == 0:
+                st.markdown("---")
+                
+    st.stop()
+
 
 # =========================================================================
 # KIS
@@ -358,7 +515,8 @@ if query_mode == "Textual KIS":
                 st.write("")
                 st.write("")
                 if st.button("Xuất CSV", use_container_width=True):
-                    p = exporter.export_kis(results, sub_fn, max_rows=100)
+                    cart = st.session_state.get("submission_cart", {})
+                    p = exporter.export_kis(results, cart, sub_fn, max_rows=100)
                     st.success(f"Đã lưu: {p}")
 
         st.markdown(f"### Kết quả Top {len(results)} khung hình")
@@ -379,6 +537,10 @@ if query_mode == "Textual KIS":
                 tier_badge = "✅ " if tier_str == "TIER_0" else ("🔒 " if "TIER" in str(tier_str) else "")
                 ambig_mark = " ⚠️" if item.get("is_ambiguous") else ""
                 st.caption(f"{tier_badge}[{tier_str}{ambig_mark}] CEC: {item.get('cec', 0.0):.2f} | Score: {item.get('score', 0.0):.1f} (t={item.get('pts_time', 0.0):.1f}s)")
+                
+                render_pick_ui(f"kis_add_{i}", item['video'], item['frame'])
+                    
+                render_temporal_browsing(f"kis_{i}", item['video'], item['frame'])
 
 # =========================================================================
 # QA
@@ -457,7 +619,8 @@ elif query_mode == "Visual QA":
                 st.write("")
                 if st.button("Xuất CSV", use_container_width=True):
                     qa_data = [{"video": r["video"], "frame": r["frame"], "answer": engine.answer_qa(qa_q, r)} for r in results]
-                    p = exporter.export_qa(qa_data, sub_fn, max_rows=100)
+                    cart = st.session_state.get("submission_cart", {})
+                    p = exporter.export_qa(qa_data, cart, sub_fn, max_rows=100)
                     st.success(f"Đã lưu: {p}")
 
         grid = st.columns(cols_count)
@@ -474,6 +637,10 @@ elif query_mode == "Visual QA":
                     st.text(f"No image")
                 tier_info = f"[{item.get('tier', 'TIER_4')}] "
                 st.caption(f"{tier_info}Score: {item.get('score', 0.0):.2f}")
+                
+                render_pick_ui(f"qa_add_{i}", item['video'], item['frame'])
+                    
+                render_temporal_browsing(f"qa_{i}", item['video'], item['frame'])
 
 # =========================================================================
 # TRAKE
@@ -541,7 +708,8 @@ elif query_mode == "TRAKE":
                 st.write("")
                 st.write("")
                 if st.button("Xuất CSV", use_container_width=True):
-                    p = exporter.export_trake(trake_res, sub_fn, max_rows=100)
+                    cart = st.session_state.get("submission_cart", {})
+                    p = exporter.export_trake(trake_res, cart, sub_fn, max_rows=100)
                     st.success(f"Đã lưu: {p}")
 
         for r_idx, v_item in enumerate(trake_res):
@@ -559,6 +727,10 @@ elif query_mode == "TRAKE":
                             st.text(f"(image error: {e})")
                     else:
                         st.text(f"F{f_data['frame']}")
+                        
+                    render_pick_ui(f"trake_add_{r_idx}_{f_idx}", v_item['video'], f_data['frame'], f_idx, is_trake=True)
+                        
+                    render_temporal_browsing(f"trake_{r_idx}_{f_idx}", v_item['video'], f_data['frame'])
             st.divider()
 
 # =========================================================================

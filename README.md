@@ -61,6 +61,8 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+> **[LƯU Ý QUAN TRỌNG]**: Vui lòng tham khảo file [CONFIG_GUIDE.md](file:///d:/AI%20challange/codeing/CONFIG_GUIDE.md) để biết cách cấu hình `.env`, thiết lập Docker cho Neo4j/Qdrant, và hướng dẫn sử dụng tính năng "Giỏ hàng Chốt hạng" (Ranked Submission Builder).
+
 **Khởi chạy Docker:**
 Yêu cầu bật Docker cục bộ để chạy hai database (cổng 7687 cho Neo4j và 6333 cho Qdrant).
 

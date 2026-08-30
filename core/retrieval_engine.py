@@ -290,12 +290,22 @@ class RetrievalEngine:
             
             # Khai thác Aspect (Đặc biệt là Object) để bổ trợ CLIP tìm vật thể hiếm (như tê giác)
             aspect_list = []
+            common_words = {"person", "man", "woman", "people", "boy", "girl", "child", 
+                            "phone", "mobile phone", "camera", "wall", "tree", "car", "bridge", 
+                            "floor", "ground", "clothing", "shirt", "pants", "hand", "face", "building"}
+                            
             for k in ["object", "action"]:
                 val = aspect_prompts.get(k)
                 if val:
-                    # Tách các object/action bằng dấu phẩy để CLIP tập trung vào từng thực thể
+                    # Tách các object/action bằng dấu phẩy
                     parts = [p.strip() for p in val.split(",")]
-                    aspect_list.extend([p for p in parts if len(p) > 2])
+                    for p in parts:
+                        if len(p) > 2 and p.lower() not in common_words:
+                            aspect_list.append(p)
+                            
+            # Fallback nếu vô tình filter mất hết
+            if not aspect_list and aspect_prompts.get("object"):
+                aspect_list = [p.strip() for p in aspect_prompts["object"].split(",") if len(p.strip()) > 2]
             
             aspect_bonus = np.zeros(N, dtype=np.float32)
             if aspect_list:
@@ -347,30 +357,33 @@ class RetrievalEngine:
                 for li, gi in enumerate(v_indices):
                     seq_bonus[gi] = frame_bonuses[li]
                     cec_scores[gi] = cec_val
-
+                
             if seq_bonus.max() > 0:
                 seq_bonus = seq_bonus / seq_bonus.max()
-                # Smooth seq_bonus so the sequence path lifts its neighbors (tạo chuỗi)
-                smoothed_seq = np.zeros_like(seq_bonus)
-                for vname, v_indices in self.video_to_indices.items():
-                    v_seq = seq_bonus[v_indices]
-                    if v_seq.max() > 0:
-                        v_seq_smooth = self.temporal_engine.gaussian_smoothing(v_seq, window_size=11, sigma=3.0)
-                        for li, gi in enumerate(v_indices):
-                            smoothed_seq[gi] = (0.4 * v_seq[li]) + (0.6 * v_seq_smooth[li])
-                seq_bonus = smoothed_seq
 
-            # Fusion cân bằng để chống hiện tượng Bag-of-Words che khuất vật thể hiếm
+            # Fusion cân bằng và Phạt Context (Context Consensus Penalty)
             max_phase_sim = np.max(phase_sims, axis=0)
-            visual_scores = (global_sim * 0.40) + (aspect_bonus * 0.20) + (max_phase_sim * 0.25) + (seq_bonus * 0.15)
+            
+            # Phạt các frame chỉ có vật thể đứng trơ trọi mà mất hoàn toàn bối cảnh (vd: quả bí xanh treo trên cây)
+            # context_gap đo lường mức độ "chênh lệch" giữa vật thể và bối cảnh tổng thể
+            context_gap = np.maximum(0.0, aspect_bonus - global_sim)
+            context_penalty = context_gap * 0.50
+            
+            visual_scores = (global_sim * 0.40) + (aspect_bonus * 0.25) + (max_phase_sim * 0.20) + (seq_bonus * 0.15) - context_penalty
         else:
             # Single-Span / Holistic Mode
             prompt_list = [global_text]
+            common_words = {"person", "man", "woman", "people", "boy", "girl", "child", 
+                            "phone", "mobile phone", "camera", "wall", "tree", "car", "bridge", 
+                            "floor", "ground", "clothing", "shirt", "pants", "hand", "face", "building"}
+                            
             for k in ["action", "object", "scene"]:
                 val = aspect_prompts.get(k)
                 if val and val != global_text:
                     parts = [p.strip() for p in val.split(",")]
-                    prompt_list.extend([p for p in parts if len(p) > 2])
+                    for p in parts:
+                        if len(p) > 2 and p.lower() not in common_words:
+                            prompt_list.append(p)
 
             if len(prompt_list) > 1:
                 p_feats = self.visual_retriever.encode_text(prompt_list)
@@ -394,23 +407,6 @@ class RetrievalEngine:
                 visual_scores = global_sim
             cec_scores = visual_scores
 
-        # 5.5 Adaptive Visual Temporal Smoothing (Bảo toàn đỉnh nhọn cho truy vấn chớp nhoáng)
-        smoothed_visual = np.zeros_like(visual_scores)
-        is_seq = intent_flags.get("is_sequence", False)
-        
-        # Cấu hình làm mịn linh hoạt theo loại truy vấn
-        win_size = 15 if is_seq else 5
-        sig = 4.0 if is_seq else 1.0
-        smooth_weight = 0.60 if is_seq else 0.15
-        
-        for vname, v_indices in self.video_to_indices.items():
-            v_scores = visual_scores[v_indices]
-            if len(v_scores) > 0 and v_scores.max() > 0:
-                v_smoothed = self.temporal_engine.gaussian_smoothing(v_scores, window_size=win_size, sigma=sig)
-                v_hybrid = ((1.0 - smooth_weight) * v_scores) + (smooth_weight * v_smoothed)
-                for li, gi in enumerate(v_indices):
-                    smoothed_visual[gi] = v_hybrid[li]
-        visual_scores = smoothed_visual
 
         # 6. ASR Scoring (BM25 + Gaussian Smoothing)
         audio_scores = np.zeros(N, dtype=np.float32)
@@ -719,3 +715,48 @@ class RetrievalEngine:
         if self.qa_normalizer:
             return self.qa_normalizer.normalize_answer(question)
         return "Có"
+
+    def get_adjacent_keyframes(self, video_name: str, center_frame: int, radius: int = 50) -> List[Dict[str, Any]]:
+        """Lấy các keyframe lân cận của một frame trong video (phục vụ Temporal Browsing)"""
+        if not video_name or video_name not in self.video_to_indices:
+            return []
+        
+        indices = self.video_to_indices[video_name]
+        
+        # Tìm index có frame gần center_frame nhất
+        target_idx = 0
+        min_diff = float('inf')
+        for i, idx in enumerate(indices):
+            kf_dict = self.keyframe_map[idx]
+            _kf = kf_dict.get("keyframe_idx")
+            kf_id = int(_kf) if _kf is not None else 1
+            frame = int(kf_dict.get("frame") or kf_dict.get("frame_idx") or kf_id)
+            diff = abs(frame - center_frame)
+            if diff < min_diff:
+                min_diff = diff
+                target_idx = i
+                
+        # Lấy dải lân cận
+        start_i = max(0, target_idx - radius)
+        end_i = min(len(indices), target_idx + radius + 1)
+        
+        adjacent_items = []
+        for i in range(start_i, end_i):
+            idx = indices[i]
+            item = self.keyframe_map[idx]
+            _kf = item.get("keyframe_idx")
+            kf_id = int(_kf) if _kf is not None else 1
+            frame = int(item.get("frame") or item.get("frame_idx") or kf_id)
+            img_path = self.get_image_path(video_name, kf_id, frame)
+            
+            adjacent_items.append({
+                "video": video_name,
+                "frame": frame,
+                "keyframe_idx": kf_id,
+                "pts_time": float(item.get("pts_time", 0.0)),
+                "image_path": img_path,
+                "offset_idx": i - target_idx  # 0 là center, - là trước, + là sau
+            })
+            
+        return adjacent_items
+

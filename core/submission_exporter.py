@@ -17,158 +17,184 @@ class SubmissionExporter:
 
     def export_kis(
         self,
-        results: List[Tuple[str, int]] | List[Dict[str, Any]],
+        ai_results: List[Dict[str, Any]],
+        manual_picks: Dict[int, Dict[str, Any]],
         output_filename: str,
         max_rows: int = 100
     ) -> str:
         """
-        Xuất file CSV cho câu hỏi KIS:
-        Format: <video_name>,<frame_idx>
-        Đảm bảo đúng tối đa max_rows (100 dòng).
+        Xuất file CSV cho câu hỏi KIS chuẩn AIC:
+        Kết hợp manual_picks (chốt tay theo hạng) và ai_results lấp vào chỗ trống.
         """
         if not output_filename.endswith(".csv"):
             output_filename += ".csv"
         filepath = os.path.join(self.submission_dir, output_filename)
 
-        rows = []
-        for item in results:
-            if isinstance(item, dict):
+        final_rows = [None] * max_rows
+        used_frames = set()
+
+        # 1. Gán các vị trí chốt tay
+        for rank, item in manual_picks.items():
+            idx = rank - 1
+            if 0 <= idx < max_rows:
                 video = item.get("video")
-                frame = item.get("frame")
-            elif isinstance(item, (list, tuple)):
-                video = item[0]
-                frame = item[1]
-            else:
-                continue
-            if video and frame is not None:
-                rows.append([video, int(frame)])
+                frame = int(item.get("frame", 0))
+                if video:
+                    final_rows[idx] = [video, frame]
+                    used_frames.add((video, frame))
 
-        # Nếu không đủ max_rows và có ít nhất 1 kết quả, pad thêm để đạt max_rows
-        if 0 < len(rows) < max_rows:
-            orig_len = len(rows)
-            idx = 0
-            while len(rows) < max_rows:
-                rows.append(rows[idx % orig_len])
-                idx += 1
-
-        rows = rows[:max_rows]
+        # 2. Lấp đầy khoảng trống bằng AI
+        ai_idx = 0
+        for i in range(max_rows):
+            if final_rows[i] is None:
+                # Tìm AI prediction tiếp theo chưa được dùng
+                while ai_idx < len(ai_results):
+                    a_item = ai_results[ai_idx]
+                    a_vid = a_item.get("video")
+                    a_frm = int(a_item.get("frame", 0))
+                    ai_idx += 1
+                    if a_vid and (a_vid, a_frm) not in used_frames:
+                        final_rows[i] = [a_vid, a_frm]
+                        used_frames.add((a_vid, a_frm))
+                        break
+                
+                # Nếu hết AI predictions, đệm bằng Top 1
+                if final_rows[i] is None:
+                    if final_rows[0]:
+                        final_rows[i] = final_rows[0]
+                    else:
+                        final_rows[i] = ["dummy_video.mp4", 0]
 
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            for r in rows:
+            for r in final_rows:
                 writer.writerow(r)
 
-        print(f"[Exporter] Đã ghi {len(rows)} dòng vào '{filepath}'")
+        print(f"[Exporter] Đã ghi {len(final_rows)} dòng vào '{filepath}'")
         return filepath
 
     def export_qa(
         self,
-        results: List[Dict[str, Any]] | List[Tuple[str, int, str]],
+        ai_results: List[Dict[str, Any]],
+        manual_picks: Dict[int, Dict[str, Any]],
         output_filename: str,
         max_rows: int = 100
     ) -> str:
         """
-        Xuất file CSV cho câu hỏi Q&A:
-        Format: <video_name>,<frame_idx>,<answer>
-        Đảm bảo đủ max_rows (100 dòng).
+        Xuất file CSV cho câu hỏi Q&A chuẩn AIC.
         """
         if not output_filename.endswith(".csv"):
             output_filename += ".csv"
         filepath = os.path.join(self.submission_dir, output_filename)
 
-        rows = []
-        for item in results:
-            if isinstance(item, dict):
+        final_rows = [None] * max_rows
+        used_frames = set()
+
+        for rank, item in manual_picks.items():
+            idx = rank - 1
+            if 0 <= idx < max_rows:
                 video = item.get("video")
-                frame = item.get("frame")
-                ans = str(item.get("answer", "")).strip()
-            elif isinstance(item, (list, tuple)):
-                video = item[0]
-                frame = item[1]
-                ans = str(item[2]).strip() if len(item) > 2 else ""
-            else:
-                continue
+                frame = int(item.get("frame", 0))
+                ans = str(item.get("answer", "Có")).strip()
+                if not ans or ans in ["0", "unknown"]: ans = "Có"
+                if len(ans) > 100: ans = ans[:100]
+                if video:
+                    final_rows[idx] = [video, frame, ans]
+                    used_frames.add((video, frame))
 
-            if not ans or ans in ["0", "unknown"]:
-                ans = "Có"
-
-            if len(ans) > 100:
-                ans = ans[:100]
-
-            if video and frame is not None:
-                rows.append([video, int(frame), ans])
-
-        # Nếu không đủ max_rows và có kết quả, pad thêm
-        if 0 < len(rows) < max_rows:
-            orig_len = len(rows)
-            idx = 0
-            while len(rows) < max_rows:
-                rows.append(rows[idx % orig_len])
-                idx += 1
-
-        rows = rows[:max_rows]
+        ai_idx = 0
+        for i in range(max_rows):
+            if final_rows[i] is None:
+                while ai_idx < len(ai_results):
+                    a_item = ai_results[ai_idx]
+                    a_vid = a_item.get("video")
+                    a_frm = int(a_item.get("frame", 0))
+                    a_ans = str(a_item.get("answer", "Có")).strip()
+                    if not a_ans or a_ans in ["0", "unknown"]: a_ans = "Có"
+                    if len(a_ans) > 100: a_ans = a_ans[:100]
+                    ai_idx += 1
+                    
+                    if a_vid and (a_vid, a_frm) not in used_frames:
+                        final_rows[i] = [a_vid, a_frm, a_ans]
+                        used_frames.add((a_vid, a_frm))
+                        break
+                        
+                if final_rows[i] is None:
+                    if final_rows[0]:
+                        final_rows[i] = final_rows[0]
+                    else:
+                        final_rows[i] = ["dummy_video.mp4", 0, "Có"]
 
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            for r in rows:
+            for r in final_rows:
                 writer.writerow(r)
 
-        print(f"[Exporter] Đã ghi {len(rows)} dòng vào '{filepath}'")
+        print(f"[Exporter] Đã ghi {len(final_rows)} dòng vào '{filepath}'")
         return filepath
 
     def export_trake(
         self,
-        results: List[Dict[str, Any]] | List[Tuple[str, List[int]]],
+        ai_results: List[Dict[str, Any]],
+        manual_picks: Dict[int, Dict[str, Any]],
         output_filename: str,
         max_rows: int = 100
     ) -> str:
         """
-        Xuất file CSV cho câu hỏi TRAKE:
-        Format: <video_name>,<frame_id_1>,<frame_id_2>,...,<frame_id_N>
-        Đảm bảo đủ max_rows (100 dòng).
+        Xuất file CSV cho câu hỏi TRAKE chuẩn AIC.
         """
         if not output_filename.endswith(".csv"):
             output_filename += ".csv"
         filepath = os.path.join(self.submission_dir, output_filename)
 
-        rows = []
-        for item in results:
-            if isinstance(item, dict):
+        final_rows = [None] * max_rows
+        used_videos = set()
+
+        for rank, item in manual_picks.items():
+            idx = rank - 1
+            if 0 <= idx < max_rows:
                 video = item.get("video")
-                frames = item.get("frames", [])
-                if not frames:
-                    frames = item.get("matched_timestamps", [])
+                frames_dict = item.get("frames", {})
+                if video and frames_dict:
+                    # Sort by event_idx
+                    frame_ids = [frames_dict[k] for k in sorted(frames_dict.keys())]
+                    final_rows[idx] = [video] + frame_ids
+                    used_videos.add(video)
 
-                if isinstance(frames, list) and len(frames) > 0 and isinstance(frames[0], dict):
-                    frame_ids = [int(f.get("frame", 0)) for f in frames]
-                else:
-                    frame_ids = [int(f) for f in frames]
-            elif isinstance(item, (list, tuple)):
-                video = item[0]
-                frame_ids = [int(f) for f in item[1:]] if not isinstance(item[1], (list, tuple)) else [int(f) for f in item[1]]
-            else:
-                continue
-
-            if video and frame_ids:
-                row = [video] + frame_ids
-                rows.append(row)
-
-        # Nếu không đủ max_rows và có kết quả, pad thêm
-        if 0 < len(rows) < max_rows:
-            orig_len = len(rows)
-            idx = 0
-            while len(rows) < max_rows:
-                rows.append(rows[idx % orig_len])
-                idx += 1
-
-        rows = rows[:max_rows]
+        ai_idx = 0
+        for i in range(max_rows):
+            if final_rows[i] is None:
+                while ai_idx < len(ai_results):
+                    a_item = ai_results[ai_idx]
+                    a_vid = a_item.get("video")
+                    
+                    frames = a_item.get("frames", [])
+                    if not frames: frames = a_item.get("matched_timestamps", [])
+                    
+                    if isinstance(frames, list) and len(frames) > 0 and isinstance(frames[0], dict):
+                        f_ids = [int(f.get("frame", 0)) for f in frames]
+                    else:
+                        f_ids = [int(f) for f in frames]
+                        
+                    ai_idx += 1
+                    
+                    if a_vid and f_ids and a_vid not in used_videos:
+                        final_rows[i] = [a_vid] + f_ids
+                        used_videos.add(a_vid)
+                        break
+                        
+                if final_rows[i] is None:
+                    if final_rows[0]:
+                        final_rows[i] = final_rows[0]
+                    else:
+                        final_rows[i] = ["dummy_video.mp4", 0]
 
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            for r in rows:
+            for r in final_rows:
                 writer.writerow(r)
 
-        print(f"[Exporter] Đã ghi {len(rows)} dòng vào '{filepath}'")
+        print(f"[Exporter] Đã ghi {len(final_rows)} dòng vào '{filepath}'")
         return filepath
 
     def zip_submissions(
