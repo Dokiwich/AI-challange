@@ -153,15 +153,19 @@ class TemporalAlignmentEngine:
             for t in range(s, T):
                 sim_current = float(score_matrix[s, t])
                 
-                # 1. Nhánh Match: Tìm k < t tối ưu
+                # 1. Nhánh Match: Tìm k < t tối ưu (Duyệt ngược để Break sớm, giảm O(T^2) -> O(T))
                 best_val = -1e9
                 best_k = -1
-                for k in range(t):
+                for k in range(t - 1, -1, -1):
                     if dp[s - 1, k] <= -1e8:
                         continue
                     delta_t = float(timestamps[t] - timestamps[k])
                     if delta_t <= 0.0:
                         continue
+
+                    # Nếu khoảng cách thời gian quá lớn (vượt xa w_max), gap_pen sẽ khổng lồ -> Break sớm
+                    if delta_t > w_max * 2.0:
+                        break
 
                     # Duration-normalized gap penalty
                     delta_t_norm = delta_t / (tau_scaled + 1e-6)

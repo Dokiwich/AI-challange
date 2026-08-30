@@ -136,6 +136,19 @@ def render_pick_ui(unique_key: str, video: str, frame: int, event_idx=0, is_trak
             update_cart(video, frame, rank_val, event_idx, is_trake)
             st.rerun()
 
+import io
+
+@st.cache_data(show_spinner=False, max_entries=2000)
+def load_cached_thumbnail(image_path: str, size: int = 300) -> bytes:
+    try:
+        img = Image.open(image_path)
+        img.thumbnail((size, size))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        return buf.getvalue()
+    except Exception:
+        return b""
+
 def render_temporal_browsing(unique_key: str, video_name: str, center_frame: int):
     if st.button("[🔎] Duyệt lân cận", key=f"btn_browse_{unique_key}", use_container_width=True):
         st.session_state["browsing_video"] = video_name
@@ -220,7 +233,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### ⚙️ Cấu hình truy xuất")
 auto_translate = st.sidebar.checkbox("Tự động dịch sang tiếng Anh", value=True)
 filter_extracted = st.sidebar.checkbox(f"Chỉ tìm trong video đã trích xuất ({len(extracted_videos)})", value=False)
-top_k = st.sidebar.slider("Top K kết quả:", min_value=10, max_value=100, value=50, step=10)
+top_k = st.sidebar.slider("Top K kết quả:", min_value=10, max_value=200, value=100, step=10)
 cols_count = st.sidebar.slider("Số cột hiển thị:", min_value=2, max_value=6, value=4, step=1)
 diversity_top_2 = st.sidebar.checkbox("Lọc đa dạng hóa Top-2 (Diversity)", value=False)
 
@@ -282,7 +295,17 @@ if st.session_state.get("browsing_video"):
         
     st.divider()
     
-    adj_items = engine.get_adjacent_keyframes(v_name, c_frame, radius=50)
+    # Cho phép người dùng tùy chỉnh số lượng ảnh muốn duyệt sang 2 bên
+    br_radius = st.slider(
+        "Phạm vi duyệt (số khung hình sang mỗi bên):", 
+        min_value=10, 
+        max_value=500, 
+        value=120, 
+        step=10,
+        help="120 khung hình tương đương hiển thị tổng cộng 241 ảnh xung quanh tâm."
+    )
+    
+    adj_items = engine.get_adjacent_keyframes(v_name, c_frame, radius=br_radius)
     if not adj_items:
         st.warning("Không tìm thấy khung hình.")
     else:
@@ -296,7 +319,11 @@ if st.session_state.get("browsing_video"):
                 st.markdown(f"{mark}**F{item['frame']}** (t={item['pts_time']:.1f}s)")
                 
                 if item["image_path"] and os.path.exists(item["image_path"]):
-                    st.image(Image.open(item["image_path"]), use_container_width=True)
+                    img_bytes = load_cached_thumbnail(item["image_path"], size=300)
+                    if img_bytes:
+                        st.image(img_bytes, use_container_width=True)
+                    else:
+                        st.text("Image load error")
                 else:
                     st.text("No image")
                     
@@ -527,7 +554,11 @@ if query_mode == "Textual KIS":
                 st.markdown(f"**#{i+1}. {item['video']} F{item['frame']}**")
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
-                        st.image(Image.open(item["image_path"]), use_container_width=True)
+                        img_bytes = load_cached_thumbnail(item["image_path"])
+                        if img_bytes:
+                            st.image(img_bytes, use_container_width=True)
+                        else:
+                            st.text("Image load error")
                     except Exception as e:
                         st.text(f"(image error: {e})")
                 else:
@@ -630,7 +661,11 @@ elif query_mode == "Visual QA":
                 st.markdown(f"**#{i+1}. {item['video']} F{item['frame']}**")
                 if item["image_path"] and os.path.exists(item["image_path"]):
                     try:
-                        st.image(Image.open(item["image_path"]), use_container_width=True)
+                        img_bytes = load_cached_thumbnail(item["image_path"])
+                        if img_bytes:
+                            st.image(img_bytes, use_container_width=True)
+                        else:
+                            st.text("Image load error")
                     except Exception as e:
                         st.text(f"(image error: {e})")
                 else:
@@ -722,7 +757,11 @@ elif query_mode == "TRAKE":
                     st.markdown(f"**E{f_idx+1}: F{f_data['frame']}** (t={f_data['pts_time']:.1f}s)")
                     if f_data["image_path"] and os.path.exists(f_data["image_path"]):
                         try:
-                            st.image(Image.open(f_data["image_path"]), use_container_width=True)
+                            img_bytes = load_cached_thumbnail(f_data["image_path"])
+                            if img_bytes:
+                                st.image(img_bytes, use_container_width=True)
+                            else:
+                                st.text("Image load error")
                         except Exception as e:
                             st.text(f"(image error: {e})")
                     else:

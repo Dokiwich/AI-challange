@@ -564,11 +564,6 @@ class RetrievalEngine:
         results = []
         for item in ranked[:top_k]:
             item["score"] = item.pop("final_score", item.get("score", 0.0))
-            
-            # Tự động điền đáp án cho dạng Q&A
-            if intent_flags.get("task_type") == "QA" or "hỏi" in raw_query.lower() or "?" in raw_query:
-                item["answer"] = self.answer_qa(raw_query, item)
-                
             results.append(item)
 
         intent_flags["active_track"] = active_track
