@@ -408,8 +408,10 @@ class RetrievalEngine:
             cec_scores = visual_scores
 
 
-        # 6. ASR Scoring (BM25 + Gaussian Smoothing)
+        # 6. ASR Scoring (BM25 + Gaussian Smoothing + HARD KEYWORD BOOST)
         audio_scores = np.zeros(N, dtype=np.float32)
+        hard_asr_boost = np.zeros(N, dtype=np.float32)
+        
         if self.has_bm25 and effective_audio_weight > 0:
             if asr_keywords:
                 kws = self.compiler.extract_speech_keywords(asr_keywords) if isinstance(asr_keywords, str) else asr_keywords
@@ -419,8 +421,20 @@ class RetrievalEngine:
             intent_flags["speech_keywords"] = kws
             if kws:
                 bm25_raw = np.array(self.bm25.get_scores(kws), dtype=np.float32)
+                
+                # TÌM TỪ KHÓA THEN CHỐT (HARD MATCH)
+                if self.asr_texts:
+                    for i, txt in enumerate(self.asr_texts):
+                        if txt:
+                            txt_lower = txt.lower()
+                            matches = sum(1 for kw in kws if len(kw) > 1 and kw.lower() in txt_lower)
+                            if matches > 0:
+                                bm25_raw[i] += matches * 10.0
+                                hard_asr_boost[i] = matches * 1.5  # Điểm cộng tuyệt đối cực mạnh (1.5 - 4.5)
+                                
                 if bm25_raw.max() > 0:
                     smoothed = np.zeros_like(bm25_raw)
+                    smoothed_hard = np.zeros_like(hard_asr_boost)
                     for vname, v_indices in self.video_to_indices.items():
                         v_bm25 = bm25_raw[v_indices]
                         if len(v_bm25) > 0 and v_bm25.max() > 0:
@@ -428,8 +442,16 @@ class RetrievalEngine:
                             v_hybrid = (0.25 * float(v_bm25.max())) + (0.75 * v_smoothed)
                             for li, gi in enumerate(v_indices):
                                 smoothed[gi] = v_hybrid[li]
+                                
+                        v_hard = hard_asr_boost[v_indices]
+                        if len(v_hard) > 0 and v_hard.max() > 0:
+                            v_hard_smoothed = self.temporal_engine.gaussian_smoothing(v_hard, window_size=15, sigma=3.0)
+                            for li, gi in enumerate(v_indices):
+                                smoothed_hard[gi] = v_hard_smoothed[li]
+                                
                     if smoothed.max() > 0:
                         audio_scores = smoothed / smoothed.max()
+                    hard_asr_boost = smoothed_hard
 
         # 7. Anchor Boost với Confusion-Aware Fuzzy OCR Match
         anchors = intent_flags.get("anchors", [])
@@ -443,7 +465,7 @@ class RetrievalEngine:
                             anchor_boost[idx] = float(sim)
                             break
 
-        # 8. Modality Fusion — Additive capped: ASR chỉ boost tối đa 15% so với visual max
+        # 8. Modality Fusion — Additive capped: ASR chỉ boost tối đa 15% so với visual max (đối với BM25 mềm)
         if effective_audio_weight > 0 and audio_scores.max() > 0:
             asr_cap = float(visual_scores.max()) * 0.15
             asr_bonus = np.minimum(effective_audio_weight * audio_scores * float(visual_scores.max()) * 0.25, asr_cap)
@@ -451,6 +473,12 @@ class RetrievalEngine:
         else:
             final_scores = visual_scores
 
+        # Áp dụng Hard Boost theo cấp số nhân (Hoạt động như bộ lọc Re-rank trên kết quả CLIP)
+        if hard_asr_boost.max() > 0:
+            # Video phải có điểm CLIP (visual) tốt thì khi nhân lên mới lọt vào Top.
+            # Tránh trường hợp video đen xì (visual = 0.01) nhưng có ASR lại leo lên Top.
+            final_scores = np.maximum(final_scores, 0.0) * (1.0 + hard_asr_boost * 4.0)
+            
         if anchor_boost.max() > 0:
             final_scores = final_scores + (anchor_boost * 0.15)
 
@@ -647,11 +675,20 @@ class RetrievalEngine:
         if not hasattr(self, "_qwen_model"):
             logger.info("[RetrievalEngine] Loading Qwen2-VL-2B-Instruct VLM on-demand...")
             from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-            self._qwen_processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-            self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                "Qwen/Qwen2-VL-2B-Instruct",
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
-            ).to(self.device)
+            try:
+                self._qwen_processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct", local_files_only=True)
+                self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    "Qwen/Qwen2-VL-2B-Instruct",
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                    local_files_only=True
+                ).to(self.device)
+            except Exception:
+                # Fallback to online loading if cache is incomplete
+                self._qwen_processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+                self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    "Qwen/Qwen2-VL-2B-Instruct",
+                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
+                ).to(self.device)
             logger.info("[RetrievalEngine] Qwen2-VL loaded successfully.")
 
     def _build_dual_vision_images(self, img: Image.Image) -> List[Image.Image]:

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AIC 2026 Video Retrieval", layout="wide", initial_sidebar_state="expanded")
 
-_ENGINE_VERSION = 16
+_ENGINE_VERSION = 17
 if st.session_state.get("_engine_ver") != _ENGINE_VERSION:
     for k in [k for k in st.session_state if k.startswith(("kis_", "qa_", "trake_"))]:
         del st.session_state[k]
