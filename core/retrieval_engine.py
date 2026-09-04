@@ -25,6 +25,7 @@ from core.meta_router import MetaRouter, MetaFeatureVector
 from core.task_handlers import QAnswerNormalizer, TRAKE3StageLocalizer
 from core.semantic_ir import CommonSemanticIR
 from core.graph_matcher import GraphMatcher
+from core.grounding_dino_engine import GroundingDINOEngine
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class RetrievalEngine:
         self.meta_router = MetaRouter()
         self.trake_localizer = TRAKE3StageLocalizer(self.temporal_engine, image_resolver=self.get_image_path)
         self.qa_normalizer = QAnswerNormalizer()
+        self.grounding_dino = GroundingDINOEngine(device=self.device)
         
         # Tích hợp Neo4j Graph Matcher
         self.neo4j_driver = neo4j_driver
@@ -223,7 +225,8 @@ class RetrievalEngine:
         use_asr: bool = False,
         asr_keywords: Optional[str] = None,
         engine_mode: str = "hybrid",
-        diversity_top_2: bool = False
+        diversity_top_2: bool = False,
+        use_dino_counting: bool = False
     ) -> Tuple[List[Dict[str, Any]], str, Dict[str, Any]]:
         """
         Tìm kiếm hợp nhất 4 Track chuẩn V3.3 với Direct Cosine Similarity và Evidence Judge.
@@ -590,9 +593,47 @@ class RetrievalEngine:
         ranked = self.evidence_engine.rank_candidates(candidate_items, intent_flags, diversity_top_2=diversity_top_2)
 
         results = []
-        for item in ranked[:top_k]:
+        for item in ranked:
             item["score"] = item.pop("final_score", item.get("score", 0.0))
             results.append(item)
+            
+        # =====================================================================
+        # STAGE 4: RE-RANKING WITH GROUNDING DINO (OBJECT COUNTING)
+        # =====================================================================
+        if use_dino_counting:
+            count_match = re.search(r'(\d+)\s+(con|chiếc|cái|người|quả|trái|viên|tô|bát)', raw_query.lower())
+            if count_match:
+                target_count = int(count_match.group(1))
+                dino_prompt = aspect_prompts.get("object") or global_text
+                dino_prompt = dino_prompt.replace(",", ".")
+                logger.info(f"[RetrievalEngine] DINO Counting triggered: Target={target_count}, Prompt='{dino_prompt}'")
+                
+                # Nâng phễu lọc lên Top 300 cho DINO
+                dino_pool = results[:300]
+                for item in dino_pool:
+                    img_path = item.get("image_path")
+                    if img_path and os.path.exists(img_path):
+                        try:
+                            img = Image.open(img_path).convert("RGB")
+                            cnt, boxes, scores, labels = self.grounding_dino.count_objects(img, dino_prompt)
+                            item["dino_count"] = cnt
+                            
+                            # Tính điểm mềm (Soft Scoring) - Không coi DINO là tuyệt đối
+                            if cnt == target_count:
+                                item["score"] += 0.15  # Đủ để vượt lên nếu CLIP score xấp xỉ, nhưng không tuyệt đối
+                            elif cnt > 0:
+                                diff = abs(cnt - target_count)
+                                soft_bonus = max(0, 0.05 - (diff * 0.01))
+                                item["score"] += soft_bonus
+                        except Exception as e:
+                            logger.error(f"[DINO Rerank] Lỗi xử lý ảnh {img_path}: {e}")
+                            item["dino_count"] = 0
+                
+                # Re-sort lại kết quả sau khi cộng điểm DINO
+                results.sort(key=lambda x: x["score"], reverse=True)
+
+        # Cắt đúng top_k để trả về UI
+        results = results[:top_k]
 
         intent_flags["active_track"] = active_track
         if results:
@@ -656,97 +697,7 @@ class RetrievalEngine:
             self.visual_retriever.model = self.visual_retriever.model.to(self.device)
         logger.info("[RetrievalEngine] CLIP reloaded to GPU.")
 
-    def unload_qwen(self):
-        """Giải phóng Qwen2-VL khỏi GPU."""
-        if hasattr(self, '_qwen_model'):
-            del self._qwen_model
-        if hasattr(self, '_qwen_processor'):
-            del self._qwen_processor
-        import gc
-        gc.collect()
-        torch.cuda.empty_cache()
-        logger.info("[RetrievalEngine] Qwen2-VL unloaded from GPU. VRAM freed.")
 
-    # ======================================================================
-    # VLM INFERENCE (Dual-Vision Dynamic Tiling)
-    # ======================================================================
-
-    def _lazy_load_qwen(self):
-        if not hasattr(self, "_qwen_model"):
-            logger.info("[RetrievalEngine] Loading Qwen2-VL-2B-Instruct VLM on-demand...")
-            from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
-            try:
-                self._qwen_processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct", local_files_only=True)
-                self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                    "Qwen/Qwen2-VL-2B-Instruct",
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                    local_files_only=True
-                ).to(self.device)
-            except Exception:
-                # Fallback to online loading if cache is incomplete
-                self._qwen_processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-                self._qwen_model = Qwen2VLForConditionalGeneration.from_pretrained(
-                    "Qwen/Qwen2-VL-2B-Instruct",
-                    torch_dtype=torch.float16 if self.device == "cuda" else torch.float32
-                ).to(self.device)
-            logger.info("[RetrievalEngine] Qwen2-VL loaded successfully.")
-
-    def _build_dual_vision_images(self, img: Image.Image) -> List[Image.Image]:
-        """Dual-Vision: ảnh bối cảnh thu nhỏ + ảnh crop trung tâm sắc nét."""
-        context_img = img.resize((224, 224), Image.LANCZOS)
-        w, h = img.size
-        crop_size = min(416, w, h)
-        left = (w - crop_size) // 2
-        top = (h - crop_size) // 2
-        detail_img = img.crop((left, top, left + crop_size, top + crop_size))
-        return [context_img, detail_img]
-
-    def answer_qa(self, question: str, item: Dict[str, Any]) -> str:
-        """Trả lời QA bằng Qwen2-VL với chiến thuật Dual-Vision."""
-        image_path = item.get("image_path", "")
-        if not image_path or not os.path.exists(image_path):
-            return "Có"
-
-        try:
-            self._lazy_load_qwen()
-            img = Image.open(image_path).convert("RGB")
-            dual_imgs = self._build_dual_vision_images(img)
-
-            prompt = (
-                "Image 1 is the full scene for context. "
-                "Image 2 is a close-up crop for detail. "
-                f"Answer as briefly as possible. Question: {question}"
-            )
-            content = [
-                {"type": "image", "image": dual_imgs[0]},
-                {"type": "image", "image": dual_imgs[1]},
-                {"type": "text", "text": prompt}
-            ]
-            messages = [{"role": "user", "content": content}]
-
-            text = self._qwen_processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            inputs = self._qwen_processor(text=[text], images=dual_imgs, padding=True, return_tensors="pt").to(self.device)
-
-            generated_ids = self._qwen_model.generate(**inputs, max_new_tokens=20)
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-            ]
-            raw_ans = self._qwen_processor.batch_decode(
-                generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-            )[0]
-
-            if self.qa_normalizer:
-                return self.qa_normalizer.normalize_answer(raw_ans)
-            return raw_ans
-
-        except Exception as e:
-            if not getattr(self, "_vlm_warned", False):
-                logger.warning(f"Local VLM error in answer_qa: {e}")
-                self._vlm_warned = True
-
-        if self.qa_normalizer:
-            return self.qa_normalizer.normalize_answer(question)
-        return "Có"
 
     def get_adjacent_keyframes(self, video_name: str, center_frame: int, radius: int = 50) -> List[Dict[str, Any]]:
         """Lấy các keyframe lân cận của một frame trong video (phục vụ Temporal Browsing)"""

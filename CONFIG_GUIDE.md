@@ -6,7 +6,7 @@ Tài liệu này hướng dẫn chi tiết cách thiết lập môi trường, c
 - **Hệ điều hành:** Windows/Linux/macOS
 - **Python:** 3.9 - 3.11
 - **Docker:** Bắt buộc (để chạy Qdrant và Neo4j)
-- **VRAM tối thiểu:** 4GB (để chạy mô hình CLIP và Qwen-VL cục bộ ở chế độ tiết kiệm).
+- **VRAM tối thiểu:** 4GB (để chạy mô hình CLIP và Grounding DINO cục bộ ở chế độ tiết kiệm).
 
 ---
 

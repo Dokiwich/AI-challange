@@ -139,12 +139,12 @@ def render_pick_ui(unique_key: str, video: str, frame: int, event_idx=0, is_trak
 import io
 
 @st.cache_data(show_spinner=False, max_entries=2000)
-def load_cached_thumbnail(image_path: str, size: int = 300) -> bytes:
+def load_cached_thumbnail(image_path: str, size: int = 600) -> bytes:
     try:
         img = Image.open(image_path)
         img.thumbnail((size, size))
         buf = io.BytesIO()
-        img.save(buf, format="JPEG")
+        img.save(buf, format="JPEG", quality=90)
         return buf.getvalue()
     except Exception:
         return b""
@@ -235,6 +235,7 @@ auto_translate = st.sidebar.checkbox("Tự động dịch sang tiếng Anh", val
 filter_extracted = st.sidebar.checkbox(f"Chỉ tìm trong video đã trích xuất ({len(extracted_videos)})", value=False)
 top_k = st.sidebar.slider("Top K kết quả:", min_value=10, max_value=200, value=100, step=10)
 cols_count = st.sidebar.slider("Số cột hiển thị:", min_value=2, max_value=6, value=4, step=1)
+use_dino_counting = st.sidebar.checkbox("🦖 Bật Grounding DINO Đếm số lượng", value=True, help="Tự động re-rank ảnh nếu truy vấn có yêu cầu đếm (vd: 4 con cá)")
 diversity_top_2 = st.sidebar.checkbox("Lọc đa dạng hóa Top-2 (Diversity)", value=False)
 
 st.sidebar.markdown("---")
@@ -319,7 +320,7 @@ if st.session_state.get("browsing_video"):
                 st.markdown(f"{mark}**F{item['frame']}** (t={item['pts_time']:.1f}s)")
                 
                 if item["image_path"] and os.path.exists(item["image_path"]):
-                    img_bytes = load_cached_thumbnail(item["image_path"], size=300)
+                    img_bytes = load_cached_thumbnail(item["image_path"])
                     if img_bytes:
                         st.image(img_bytes, use_container_width=True)
                     else:
@@ -440,7 +441,8 @@ if query_mode == "Textual KIS":
                 use_asr=use_asr,
                 audio_weight=audio_weight,
                 asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
-                diversity_top_2=diversity_top_2
+                diversity_top_2=diversity_top_2,
+                use_dino_counting=use_dino_counting
             )
             lat = time.time() - t0
             st.session_state["kis_results"] = results
@@ -481,7 +483,8 @@ if query_mode == "Textual KIS":
                             use_asr=use_asr,
                             audio_weight=audio_weight,
                             asr_keywords=custom_asr_kws if custom_asr_kws.strip() else None,
-                            diversity_top_2=diversity_top_2
+                            diversity_top_2=diversity_top_2,
+                            use_dino_counting=use_dino_counting
                         )
                         st.session_state["kis_results"] = results
                         st.session_state["kis_trans_q"] = trans_q
@@ -638,19 +641,25 @@ elif query_mode == "Visual QA":
         results = st.session_state["qa_results"]
         qa_q = st.session_state.get("qa_text", "")
 
-        top_ans = engine.answer_qa(qa_q, results[0])
-        st.info(f"💡 Đáp án dự đoán chuẩn hóa (Top-1 Answer): **{top_ans}**")
+        st.info("💡 **Gợi ý:** Hãy quan sát các khung hình được tìm thấy bên dưới, chọn khung hình đúng nhất và tự nhập đáp án vào ô dưới đây để xuất CSV.")
 
         with st.expander("📥 Xuất file nộp bài (Submission CSV)", expanded=False):
-            c1, c2 = st.columns([3, 1])
+            c1, c2, c3 = st.columns([2, 2, 1])
             with c1:
                 sub_fn = st.text_input("Tên file CSV:", value=st.session_state.get("qa_sub_name", default_sub_name))
             with c2:
+                user_ans = st.text_input("📝 Nhập đáp án thủ công:", value="Có")
+            with c3:
                 st.write("")
                 st.write("")
                 if st.button("Xuất CSV", use_container_width=True):
-                    qa_data = [{"video": r["video"], "frame": r["frame"], "answer": engine.answer_qa(qa_q, r)} for r in results]
+                    # Populate answer for all results
+                    qa_data = [{"video": r["video"], "frame": r["frame"], "answer": user_ans} for r in results]
+                    # Also update cart items if any
                     cart = st.session_state.get("submission_cart", {})
+                    for rank, c_item in cart.items():
+                        c_item["answer"] = user_ans
+                        
                     p = exporter.export_qa(qa_data, cart, sub_fn, max_rows=100)
                     st.success(f"Đã lưu: {p}")
 

@@ -106,12 +106,9 @@ def phase2_vlm_qa(
         logger.info("[Pha 2] Không có đề QA. Bỏ qua.")
         return []
 
-    logger.info(f"[Pha 2] Giải phóng CLIP khỏi GPU...")
-    engine.unload_clip()
-
     saved_qa_paths = []
-    logger.info(f"[Pha 2] Bắt đầu xử lý {len(qa_queue)} đề QA bằng VLM...")
-    for qa_item in tqdm(qa_queue, desc="Pha 2: VLM QA"):
+    logger.info(f"[Pha 2] Bắt đầu xuất {len(qa_queue)} đề QA (Cần người duyệt)...")
+    for qa_item in tqdm(qa_queue, desc="Pha 2: Export QA"):
         question = qa_item["question"]
         results = qa_item["results"]
         csv_filename = qa_item["csv_filename"]
@@ -119,18 +116,12 @@ def phase2_vlm_qa(
 
         qa_data = []
         for r in results:
-            answer = r.get("answer") or engine.answer_qa(question, r)
+            answer = r.get("answer", "Có")
             qa_data.append({"video": r["video"], "frame": r["frame"], "answer": answer})
 
-        saved = exporter.export_qa(qa_data, csv_filename, max_rows=top_k)
+        saved = exporter.export_qa(qa_data, {}, csv_filename, max_rows=top_k)
         saved_qa_paths.append(saved)
         logger.info(f"[QA] Xuất: {saved} ({len(qa_data)} dòng)")
-
-    logger.info("[Pha 2] Giải phóng VLM...")
-    engine.unload_qwen()
-
-    logger.info("[Pha 2] Nạp lại CLIP cho phiên tiếp theo...")
-    engine.reload_clip()
 
     return saved_qa_paths
 

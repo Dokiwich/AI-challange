@@ -1,6 +1,6 @@
 # 🎬 AIC 2026 Video Retrieval System V4.0 (Graph-Enhanced Architecture)
 
-Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ cuộc thi AI Challenge (AIC), xây dựng trên kiến trúc V4.0 kết hợp sức mạnh của VectorDB (Qdrant), GraphDB (Neo4j), và VLM (Qwen-VL). Hệ thống không chỉ "nhìn" bằng độ tương đồng ngữ nghĩa CLIP mà còn "hiểu" được ngữ cảnh, đếm được số lượng và theo vết đối tượng qua thời gian.
+Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ cuộc thi AI Challenge (AIC), xây dựng trên kiến trúc V4.0 kết hợp sức mạnh của VectorDB (Qdrant), GraphDB (Neo4j), và Grounding DINO. Hệ thống không chỉ "nhìn" bằng độ tương đồng ngữ nghĩa CLIP mà còn "hiểu" được ngữ cảnh, đếm được số lượng và theo vết đối tượng qua thời gian.
 
 ---
 
@@ -14,9 +14,8 @@ Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ c
    - Dữ liệu bounding box và tracking được nạp vào GraphDB, đè bẹp điểm yếu "mù đếm số" và định vị tuyệt đối của mô hình CLIP.
 4. **VideoMAE V2 (Video Context)**
    - Trích xuất hành động liên tục, kết hợp sức mạnh với CLIP để phân tích ngữ cảnh tĩnh và động.
-5. **Qwen-VL & OpenRouter (Auto-QA & Semantic Query)**
-   - Giải lập QA tự động ghi đáp án vào CSV bằng mô hình `Qwen2-VL-2B-Instruct` ở local.
-   - Biên dịch cấu trúc ngữ nghĩa (Event Graph) miễn phí qua chuẩn API của OpenRouter (`google/gemma-4-26b-a4b-it:free`).
+5. **AI Query Parser (OpenRouter / Gemma)**
+   - Phân tích câu hỏi QA hoặc KIS để trích xuất ngữ cảnh. Hỗ trợ "User-in-the-loop" trả lời câu hỏi QA một cách an toàn. chuẩn API của OpenRouter (`google/gemma-4-26b-a4b-it:free`).
 
 ---
 
