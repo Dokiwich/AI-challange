@@ -49,46 +49,46 @@ Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ c
 
 ## 🚀 Hướng Dẫn Cài Đặt & Chạy
 
-### 1. Cài đặt môi trường & Database
-Khuyến nghị sử dụng Python 3.9 - 3.11:
-```bash
-# Tạo và kích hoạt môi trường ảo
-python -m venv .venv
-.\.venv\Scripts\activate
+### 1. Chuẩn Bị Dữ Liệu Cốt Lõi (Bắt Buộc)
+Do giới hạn lưu trữ của Git, toàn bộ các file dữ liệu khổng lồ **KHÔNG** có sẵn trong repo này. Khi cài đặt trên máy chủ mới, bạn cần thao tác copy thủ công:
+- **Thư mục Vector:** Copy thư mục `data/features/` (Chứa các file `clip_features.npy` ~1.25GB) vào chung thư mục `data/` của dự án để tìm kiếm bằng CLIP.
+- **Thư mục Đồ thị:** Copy thư mục `data/objects/` (Chứa hàng chục nghìn file JSON xuất từ CLIP/DINO) vào `data/objects/` của dự án để chuẩn bị nạp vào Neo4j.
+*(Các file cấu hình nhẹ như `data/mapping/map_keyframes.json` đã có sẵn)*
 
-# Cài đặt thư viện
-pip install -r requirements.txt
-```
-
-> **[LƯU Ý QUAN TRỌNG]**: Vui lòng tham khảo file [CONFIG_GUIDE.md](file:///d:/AI%20challange/codeing/CONFIG_GUIDE.md) để biết cách cấu hình `.env`, thiết lập Docker cho Neo4j/Qdrant, và hướng dẫn sử dụng tính năng "Giỏ hàng Chốt hạng" (Ranked Submission Builder).
-
-**Khởi chạy Docker:**
-Yêu cầu bật Docker cục bộ để chạy hai database (cổng 7687 cho Neo4j và 6333 cho Qdrant).
-
-### 2. Cấu hình file `.env`
-Thiết lập API Key OpenRouter để AI phân tích cấu trúc truy vấn:
+### 2. Cấu Hình Biến Môi Trường
+1. Copy file mẫu `.env.example` thành `.env`
+2. Mở `.env` và điền khóa API của OpenRouter để kích hoạt Trí tuệ nhân tạo:
 ```env
 OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxx
 OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
 ```
 
-### 3. Chuẩn bị dữ liệu (Quan trọng)
-Vì giới hạn kỹ thuật của Git, các file dữ liệu khổng lồ **không được đưa lên GitHub**. Khi cài đặt máy chủ mới, bạn phải copy thủ công các dữ liệu sau vào dự án:
-1. **Thư mục Vector:** Copy `data/features/` (Chứa các file `clip_features.npy` ~1.25GB) để tìm kiếm bằng CLIP.
-2. **Thư mục Đồ thị (Nếu dùng Neo4j):** Copy `data/objects/` (Hàng chục nghìn file JSON). Sau khi copy, chạy script sau để nạp chúng vào cơ sở dữ liệu Neo4j:
-   ```bash
-   python scripts/import_json_objects_to_neo4j.py
-   ```
-Các file cấu hình nhẹ như `data/mapping/map_keyframes.json` đã có sẵn trong Git.
+### 3. Khởi Chạy Cơ Sở Dữ Liệu (Docker)
+Hệ thống cần 2 Database chạy song song (Yêu cầu phải cài đặt Docker):
+```bash
+# Khởi chạy Qdrant (VectorDB) trên cổng 6333
+docker run -d -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
 
-### 4. Khởi chạy Pipeline và Ứng dụng
-**Mở Giao diện Web (Streamlit):**
+# Khởi chạy Neo4j (GraphDB) trên cổng 7687
+docker run -d -p 7474:7474 -p 7687:7687 -v neo4j_data:/data -v neo4j_logs:/logs -e NEO4J_AUTH=neo4j/password neo4j:latest
+```
+
+### 4. Nạp Dữ Liệu Khởi Tạo (Seed Database)
+Sau khi Neo4j đã chạy, bạn bắt buộc phải chạy kịch bản nạp dữ liệu Object JSON vào đồ thị (Chỉ cần chạy 1 lần duy nhất trên máy mới):
+```bash
+python scripts/import_json_objects_to_neo4j.py
+```
+*(Quá trình này sẽ mất một lúc do số lượng JSON rất lớn).*
+
+### 5. Khởi Chạy Ứng Dụng
+**Mở Giao diện Web Trực Quan (Streamlit):**
 ```bash
 streamlit run app.py
 ```
-
-**Chạy tự động (Batch Pipeline):**
+**Hoặc Chạy tự động (Batch Pipeline) không cần UI:**
 ```bash
 python main_pipeline.py --dir de-thi --engine_mode meta
 ```
-Hệ thống sẽ duyệt qua mọi file `.txt`, nội suy đề KIS/QA/TRAKE và nén kết quả vào `submission.zip`.
+Hệ thống sẽ duyệt qua mọi file truy vấn `.txt`, nội suy đề KIS/QA/TRAKE và nén toàn bộ kết quả vào `submission.zip`.
+
+> **[LƯU Ý QUAN TRỌNG]**: Đọc thêm [CONFIG_GUIDE.md](CONFIG_GUIDE.md) để biết cách sử dụng tính năng "Giỏ hàng Chốt hạng" (Ranked Submission Builder) và tối ưu hóa VRAM.
