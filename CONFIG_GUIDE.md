@@ -21,13 +21,20 @@ docker run -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qd
 ```
 
 ### B. Neo4j (Graph Database)
-Hỗ trợ truy xuất chuỗi sự kiện không gian thời gian (TRAKE) và liên kết ngữ nghĩa.
+Hỗ trợ truy xuất chuỗi sự kiện không gian thời gian (TRAKE) và liên kết ngữ nghĩa đối tượng.
 ```bash
 docker run -p 7474:7474 -p 7687:7687 \
   -v neo4j_data:/data -v neo4j_logs:/logs \
   -e NEO4J_AUTH=neo4j/password \
   neo4j:latest
 ```
+
+**Khởi tạo dữ liệu Neo4j (Quan trọng):**
+Mặc định database sẽ trống rỗng. Sau khi khởi động Neo4j, bạn phải nạp dữ liệu object JSON vào database (nhớ copy thư mục `data/objects` vào dự án trước):
+```bash
+python scripts/import_json_objects_to_neo4j.py
+```
+Quá trình nạp sẽ mất một lúc do số lượng file rất lớn.
 
 ---
 

@@ -6,16 +6,16 @@ Hệ thống truy vấn video (Text-to-Video / Keyframe Retrieval) phục vụ c
 
 ## 🌟 Tính Năng & Công Nghệ Lõi (V4.0)
 
-1. **Neo4j Graph Database ("Hòa mạng" Chuỗi Sự Kiện)**
-   - Giải quyết bài toán suy luận đa thực thể và định vị chuỗi thời gian (TRAKE). Trình biên dịch Cypher ép buộc tính thứ tự (`e1.timestamp < e2.timestamp`) trả về danh sách `matched_timestamps` chính xác.
+1. **Neo4j Graph Database ("Hòa mạng" Chuỗi Sự Kiện & Đối Tượng)**
+   - Lưu trữ toàn bộ thông tin hàng triệu đối tượng (JSON) được nhận diện trước. Trình biên dịch Cypher mạnh mẽ giúp ép buộc tính thứ tự (TRAKE) và lọc kết quả siêu tốc thay vì dùng LLM duyệt từng ảnh.
 2. **Qdrant VectorDB (Truy Xuất Tốc Độ Cao)**
    - Lưu trữ vector nhúng của CLIP, xử lý tìm kiếm trên tập 50GB video siêu mượt, loại bỏ thắt cổ chai CPU/RAM của Numpy mảng truyền thống.
-3. **YOLOv8 & ByteTrack (Counting & Tracking)**
-   - Dữ liệu bounding box và tracking được nạp vào GraphDB, đè bẹp điểm yếu "mù đếm số" và định vị tuyệt đối của mô hình CLIP.
-4. **VideoMAE V2 (Video Context)**
-   - Trích xuất hành động liên tục, kết hợp sức mạnh với CLIP để phân tích ngữ cảnh tĩnh và động.
+3. **Grounding DINO (Open-Vocabulary Sniper)**
+   - Mô hình Zero-Shot đóng vai trò "lính bắn tỉa", xác nhận chính xác các tính từ phức tạp và đếm số lượng vật thể khi bảng từ vựng tĩnh (Neo4j) bó tay. Tốc độ cực nhanh vì chỉ chạy trên top 300 khung hình.
+4. **Skip-Aware Monotonic DP (Temporal Alignment)**
+   - Thuật toán quy hoạch động bắt dính sự kiện theo thời gian mà không cần tải LLM nặng nề để xem video, tự động bắt mượt các pha hành động.
 5. **AI Query Parser (OpenRouter / Gemma)**
-   - Phân tích câu hỏi QA hoặc KIS để trích xuất ngữ cảnh. Hỗ trợ "User-in-the-loop" trả lời câu hỏi QA một cách an toàn. chuẩn API của OpenRouter (`google/gemma-4-26b-a4b-it:free`).
+   - Phân tích câu hỏi QA hoặc KIS để trích xuất ngữ cảnh bằng OpenRouter (`google/gemma-4-26b-a4b-it:free`), siêu tốc và an toàn, giải phóng hoàn toàn gánh nặng VRAM của máy trạm.
 
 ---
 
@@ -72,8 +72,14 @@ OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxx
 OPENROUTER_MODEL=google/gemma-4-26b-a4b-it:free
 ```
 
-### 3. Chuẩn bị dữ liệu
-Các file đồ thị sự kiện đã được gộp lại tại `data/event_graph_merged_clean_395.csv`. Đảm bảo bạn đã tải bộ dữ liệu `clip_features.npy` và `map_keyframes.json` vào thư mục `data/`.
+### 3. Chuẩn bị dữ liệu (Quan trọng)
+Vì giới hạn kỹ thuật của Git, các file dữ liệu khổng lồ **không được đưa lên GitHub**. Khi cài đặt máy chủ mới, bạn phải copy thủ công các dữ liệu sau vào dự án:
+1. **Thư mục Vector:** Copy `data/features/` (Chứa các file `clip_features.npy` ~1.25GB) để tìm kiếm bằng CLIP.
+2. **Thư mục Đồ thị (Nếu dùng Neo4j):** Copy `data/objects/` (Hàng chục nghìn file JSON). Sau khi copy, chạy script sau để nạp chúng vào cơ sở dữ liệu Neo4j:
+   ```bash
+   python scripts/import_json_objects_to_neo4j.py
+   ```
+Các file cấu hình nhẹ như `data/mapping/map_keyframes.json` đã có sẵn trong Git.
 
 ### 4. Khởi chạy Pipeline và Ứng dụng
 **Mở Giao diện Web (Streamlit):**
